@@ -323,4 +323,4 @@ ul, ol { padding: 0; list-style: none; }
 @media print { .top { position: static; } .field { display: none; } }
 
 /* captions stay still and whole while the screenshot zooms */
-.shot figcaption { animation: none !important; transform: none !important; }
+.shot figcaption { animation: none !important; transform: none !important; padding: 0 28px 8px; }
