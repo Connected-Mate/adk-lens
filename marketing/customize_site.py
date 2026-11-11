@@ -5,66 +5,103 @@ Rebuild from scratch:
     python3 ~/.claude/skills/new-project-site/scripts/scaffold.py project.json . --force
     python3 marketing/customize_site.py
 
-It adds lens.css / lens.js, swaps the hero image for the animated whiteboard illustration,
-puts the rotating coding-agent logos next to the copy button, redraws the four features,
-adds the real-screenshot slots (hidden until the files exist) and pairs "open source" with "coffee".
+The scaffold gives the plumbing (head tags, hreflang, JSON-LD, language redirect, sitemap, 404, manifest).
+This script keeps that <head>, writes the whole <body> itself, and swaps the skeleton's style.css / site.js
+for the site's own lens.css / lens.js (hand-written, kept in docs/, never generated).
 """
 import html
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 ICONS = Path.home() / ".claude/skills/new-project-site/templates/agents"
 SHEET = json.loads((ROOT / "project.json").read_text(encoding="utf-8"))
+REPO = SHEET["source_repo"]
+LEGAL = {"fr": "https://connectedmate.com/fr/mentions-legales/", "en": "https://connectedmate.com/en/legal/"}
+e = html.escape
 
 T = {
     "en": {
-        "prompt": "Plan my weekend", "you": "YOUR PROMPT", "agent": "AGENT", "tool": "TOOL",
-        "sticky": ["Why the weather", "first?"],
-        "caption": "Illustration of the idea. The real board draws your own agents.",
+        "skip": "Skip to content", "home": "home", "nav_label": "Sections", "lang_label": "Version française", "lang_short": "FR",
+        "nav": [("#features", "What it does"), ("#agent", "Set up"), ("#faq", "Questions")],
+        "copy": "Copy the setup prompt", "copy_short": "Copy the prompt", "copied": "Prompt copied", "copied_live": "Prompt copied. Paste it into your coding agent.",
         "works": "Works with Claude Code, Codex, Antigravity and Gemini CLI, Cursor, GitHub Copilot, Windsurf, or any coding agent.",
         "any": "any agent",
-        "board_label": "Illustration: a whiteboard where a prompt travels from one agent to the next, with a sticky note, a circled agent and a version stamp.",
+        "prompt": "Plan my weekend", "you": "YOUR PROMPT", "agent": "AGENTS", "tool": "TOOL",
+        "sticky": ["Why the weather", "first?"],
+        "board_label": "Illustration: a prompt travels from one agent to the next on a dotted whiteboard, next to one sticky note.",
+        "caption": "Illustration. The real board draws your own agents.",
+        "statement": "ADK Lens plugs on top of ADK and draws what your agents do, live. Nothing to change in your agent code.",
+        "story": ["You ask for a weekend plan.", "concierge hands over to weather_agent.", "weather_agent calls get_weather.", "planner writes the answer."],
+        "note": "Why the weather first?", "as_prompt": "Copy as prompt",
         "shots_title": "The real thing",
         "shots": [
             ("shot-map.png", "ADK Lens screenshot: the map of agents and tools.", "The map of your agents and tools."),
             ("shot-linear.png", "ADK Lens screenshot: the Linear view of a run.", "A run, told in plain words."),
             ("shot-notes.png", "ADK Lens screenshot: notes on the board.", "Your notes, ready to copy as a prompt."),
         ],
+        "setup_title": "Set it up with your coding agent",
+        "setup_text": "Copy this prompt and paste it into your agent. It installs ADK Lens, runs the demo and checks that everything works.",
+        "prompt_label": "Setup prompt",
+        "steps": ["Copy the prompt", "Paste it into your agent", "It installs and checks"],
+        "open_title": "Open source. Free.",
+        "open_text": "MIT licence. The code is public: read it, reuse it, improve it. If ADK Lens helps you, a coffee keeps me building.",
+        "open_btn": "See the code on GitHub", "coffee_btn": "Buy me a coffee",
+        "faq_title": "Questions",
+        "foot_title": "A live whiteboard for your ADK agents.",
+        "links_label": "Useful links", "source": "Source code", "issues": "Report a problem", "x": "@AlexCormeraie on X", "legal": "Legal notice",
+        "made": "Made in Paris.", "indie": "Independent project, not affiliated with Google.",
+        "other": "Version française",
     },
     "fr": {
-        "prompt": "Prépare mon week-end", "you": "TON PROMPT", "agent": "AGENT", "tool": "OUTIL",
-        "sticky": ["Pourquoi la météo", "d'abord ?"],
-        "caption": "Illustration de l'idée. Le vrai tableau dessine tes propres agents.",
+        "skip": "Aller au contenu", "home": "accueil", "nav_label": "Sections", "lang_label": "English version", "lang_short": "EN",
+        "nav": [("#features", "Ce que ça fait"), ("#agent", "Installer"), ("#faq", "Questions")],
+        "copy": "Copier le prompt d'installation", "copy_short": "Copier le prompt", "copied": "Prompt copié", "copied_live": "Prompt copié. Colle-le dans ton agent de code.",
         "works": "Fonctionne avec Claude Code, Codex, Antigravity et Gemini CLI, Cursor, GitHub Copilot, Windsurf, ou n'importe quel agent de code.",
         "any": "n'importe quel agent",
-        "board_label": "Illustration : un tableau blanc où un prompt passe d'un agent à l'autre, avec un post-it, un agent entouré et un tampon de version.",
+        "prompt": "Prépare mon week-end", "you": "TON PROMPT", "agent": "AGENTS", "tool": "OUTIL",
+        "sticky": ["Pourquoi la météo", "d'abord ?"],
+        "board_label": "Illustration : un prompt passe d'un agent à l'autre sur un tableau blanc pointillé, à côté d'un post-it.",
+        "caption": "Illustration. Le vrai tableau dessine tes propres agents.",
+        "statement": "ADK Lens se branche sur ADK et dessine en direct ce que font tes agents. Rien à changer dans ton code.",
+        "story": ["Tu demandes un programme de week-end.", "concierge passe la main à weather_agent.", "weather_agent appelle get_weather.", "planner rédige la réponse."],
+        "note": "Pourquoi la météo d'abord ?", "as_prompt": "Copier comme prompt",
         "shots_title": "En vrai",
         "shots": [
             ("shot-map.png", "Capture d'ADK Lens : la carte des agents et des outils.", "La carte de tes agents et de tes outils."),
             ("shot-linear.png", "Capture d'ADK Lens : la vue linéaire d'une exécution.", "Une exécution, racontée en mots simples."),
             ("shot-notes.png", "Capture d'ADK Lens : des notes sur le tableau.", "Tes notes, prêtes à copier comme prompt."),
         ],
+        "setup_title": "Installe-le avec ton agent de code",
+        "setup_text": "Copie ce prompt et colle-le dans ton agent. Il installe ADK Lens, lance la démo et vérifie que tout marche.",
+        "prompt_label": "Prompt d'installation",
+        "steps": ["Copie le prompt", "Colle-le dans ton agent", "Il installe et vérifie"],
+        "open_title": "Open source. Gratuit.",
+        "open_text": "Licence MIT. Le code est public : lis-le, réutilise-le, améliore-le. Si ADK Lens te rend service, un café m'aide à continuer.",
+        "open_btn": "Voir le code sur GitHub", "coffee_btn": "Offrir un café",
+        "faq_title": "Questions",
+        "foot_title": "Le tableau blanc en direct de tes agents ADK.",
+        "links_label": "Liens utiles", "source": "Code source", "issues": "Signaler un souci", "x": "@AlexCormeraie sur X", "legal": "Mentions légales",
+        "made": "Fait à Paris.", "indie": "Projet indépendant, non affilié à Google.",
+        "other": "English version",
     },
 }
 
 
-def icon(file: str) -> str:
+def icon(file: str, size: int = 20) -> str:
     svg = (ICONS / file).read_text(encoding="utf-8")
     svg = svg.split("</title>", 1)[-1] if "<title>" in svg else svg.split(">", 1)[1]
-    return ('<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false">'
+    return (f'<svg viewBox="0 0 24 24" width="{size}" height="{size}" fill="currentColor" aria-hidden="true" focusable="false">'
             + svg.replace("</svg>", "").strip() + "</svg>")
 
 
-def mono(ch: str) -> str:
-    return f'<span class="rot__mono">{ch}</span>'
-
-
-def rotator(lang: str) -> str:
-    items = [
+def agents(lang: str) -> list[tuple[str, str]]:
+    mono = lambda ch: f'<span class="mono-chip" aria-hidden="true">{ch}</span>'
+    return [
         (icon("claude.svg"), "Claude Code"),
         (icon("openai.svg"), "Codex"),
         (icon("googlegemini.svg"), "Antigravity · Gemini CLI"),
@@ -73,123 +110,184 @@ def rotator(lang: str) -> str:
         (icon("windsurf.svg"), "Windsurf"),
         (mono("+"), T[lang]["any"]),
     ]
-    spans = "".join(f'<span class="rot__item">{i}{html.escape(label)}</span>' for i, label in items)
-    spans += f'<span class="rot__item rot__item--dup">{items[0][0]}{items[0][1]}</span>'
+
+
+def rotator(lang: str) -> str:
+    items = agents(lang)
+    spans = "".join(f'<span class="rot__item">{i}{e(label)}</span>' for i, label in items)
+    spans += f'<span class="rot__item rot__item--dup">{items[0][0]}{e(items[0][1])}</span>'
     return (f'<div class="rot"><div class="rot__list" aria-hidden="true">{spans}</div>'
-            f'<span class="sr-only">{html.escape(T[lang]["works"])}</span></div>')
+            f'<span class="sr-only">{e(T[lang]["works"])}</span></div>')
+
+
+def copy_button(lang: str, prompt: str, label: str, cls: str = "btn btn--primary") -> str:
+    t = T[lang]
+    return (f'<button class="{cls}" type="button" data-copy="{e(prompt)}" data-copied="{e(t["copied_live"])}">'
+            f'<span class="is-idle">{e(label)}</span><span class="is-done" aria-hidden="true">{e(t["copied"])}</span></button>')
 
 
 def board_svg(lang: str) -> str:
     t = T[lang]
-    e = html.escape
-    return f"""<svg viewBox="0 0 840 540" role="img" aria-label="{e(t['board_label'])}">
-  <path class="b-line" d="M250 264 L340 264"/>
-  <path class="b-line" d="M510 250 C560 250 550 125 600 125"/>
-  <path class="b-line" d="M510 280 C560 280 550 405 600 405"/>
-  <path class="b-line" d="M700 160 C700 180 720 192 720 212" stroke-dasharray="2 7"/>
-  <circle class="b-dot b-dot--a" r="8"/>
-  <circle class="b-dot b-dot--b" r="8"/>
-  <text class="b-sub" x="44" y="222">{e(t['you'])}</text>
-  <g class="b-node b-prompt"><rect x="40" y="232" width="214" height="64" rx="32"/><text x="147" y="270" text-anchor="middle">{e(t['prompt'])}</text></g>
-  <text class="b-sub" x="344" y="216">{t['agent']}</text>
-  <g class="b-node b-blue"><rect x="340" y="226" width="170" height="76" rx="22"/><rect class="b-ring b-ring--1" x="334" y="220" width="182" height="88" rx="27"/><text x="425" y="271" text-anchor="middle">concierge</text></g>
-  <g class="b-node b-green"><rect x="600" y="90" width="200" height="70" rx="22"/><rect class="b-ring b-ring--2" x="594" y="84" width="212" height="82" rx="27"/><text x="700" y="132" text-anchor="middle">weather_agent</text></g>
-  <g class="b-node b-tool"><rect x="640" y="212" width="160" height="46" rx="23"/><text x="720" y="240" text-anchor="middle">get_weather</text></g>
-  <text class="b-sub" x="630" y="240" text-anchor="end">{t['tool']}</text>
-  <g class="b-node b-coral"><rect x="600" y="370" width="170" height="70" rx="22"/><rect class="b-ring b-ring--3" x="594" y="364" width="182" height="82" rx="27"/><text x="685" y="412" text-anchor="middle">planner</text></g>
-  <path class="b-circle" d="M588 352 C640 330 760 336 790 384 C812 430 752 468 678 462 C610 458 566 430 572 392 C576 368 600 352 628 346"/>
-  <g class="b-q"><circle cx="800" cy="350" r="19"/><text x="800" y="357" text-anchor="middle">?</text></g>
-  <g class="b-sticky"><rect x="60" y="380" width="190" height="118" rx="6"/><text x="78" y="428">{e(t['sticky'][0])}</text><text x="78" y="456">{e(t['sticky'][1])}</text></g>
-  <g class="b-stamp"><rect x="350" y="418" width="124" height="52" rx="12"/><text x="412" y="451" text-anchor="middle">V2 OK</text></g>
+    return f"""<svg viewBox="0 0 720 440" role="img" aria-label="{e(t['board_label'])}">
+  <path class="b-line" d="M230 224 H290"/>
+  <path class="b-line" d="M440 216 C475 216 465 116 500 116"/>
+  <path class="b-line" d="M440 232 C475 232 465 336 500 336"/>
+  <path class="b-line" d="M595 142 V190" stroke-dasharray="2 5"/>
+  <circle class="b-dot b-dot--a" r="6"/>
+  <circle class="b-dot b-dot--b" r="6"/>
+  <text class="b-tag" x="24" y="186">{e(t['you'])}</text>
+  <g class="b-node b-node--you"><rect x="20" y="198" width="210" height="52" rx="26"/><text x="125" y="230" text-anchor="middle">{e(t['prompt'])}</text></g>
+  <text class="b-tag" x="294" y="186">{e(t['agent'])}</text>
+  <g class="b-node"><rect x="290" y="198" width="150" height="52" rx="26"/><text x="365" y="230" text-anchor="middle">concierge</text></g>
+  <g class="b-node"><rect x="500" y="90" width="190" height="52" rx="26"/><text x="595" y="122" text-anchor="middle">weather_agent</text></g>
+  <g class="b-node b-node--tool"><rect x="520" y="190" width="150" height="44" rx="22"/><text x="595" y="217" text-anchor="middle">get_weather</text></g>
+  <g class="b-node"><rect x="500" y="310" width="140" height="52" rx="26"/><text x="570" y="342" text-anchor="middle">planner</text></g>
+  <g class="b-note" transform="rotate(-3 135 350)"><rect x="50" y="306" width="170" height="92" rx="3"/><text x="68" y="344">{e(t['sticky'][0])}</text><text x="68" y="366">{e(t['sticky'][1])}</text></g>
 </svg>"""
 
 
-MINI = [
-    # plugs in
-    '<svg viewBox="0 0 120 64" aria-hidden="true"><rect class="m-paper" x="2" y="14" width="58" height="36" rx="10"/><text class="m-txt" x="31" y="36" text-anchor="middle">ADK</text>'
-    '<g class="m-plug"><rect class="m-blue" x="62" y="14" width="40" height="36" rx="10"/><circle cx="82" cy="32" r="8" fill="none" stroke="#fff" stroke-width="2.5"/></g></svg>',
-    # watch, replay
-    '<svg viewBox="0 0 120 64" aria-hidden="true"><path class="m-stroke" d="M12 32 H108"/><circle class="m-soft" cx="12" cy="32" r="9"/><circle class="m-soft" cx="60" cy="32" r="9"/><circle class="m-soft" cx="108" cy="32" r="9"/>'
-    '<circle class="m-blue m-run" cx="12" cy="32" r="6"/></svg>',
-    # circle, comment
-    '<svg viewBox="0 0 120 64" aria-hidden="true"><rect class="m-soft" x="14" y="20" width="44" height="24" rx="9"/>'
-    '<path class="m-draw" d="M8 22 C22 6 60 8 66 30 C70 50 30 58 12 46 C2 38 6 26 16 20"/><rect class="m-yellow" x="80" y="12" width="34" height="34" rx="3" transform="rotate(5 97 29)"/></svg>',
-    # compare
-    '<svg viewBox="0 0 120 64" aria-hidden="true"><rect class="m-paper" x="2" y="8" width="52" height="48" rx="10"/><rect class="m-paper" x="66" y="8" width="52" height="48" rx="10"/>'
-    '<text class="m-txt" x="10" y="23">V1</text><text class="m-txt" x="74" y="23">V2</text>'
-    '<circle class="m-blue" cx="20" cy="40" r="6"/><circle class="m-blue" cx="38" cy="40" r="6"/>'
-    '<circle class="m-blue" cx="80" cy="40" r="6"/><circle class="m-blue" cx="94" cy="40" r="6"/><circle class="m-green m-blink" cx="108" cy="40" r="6"/></svg>',
-]
-
-
-def features(lang: str, title: str) -> str:
-    lis = "\n".join(
-        f'    <li class="feature">{MINI[i]}<h3>{html.escape(f["title"][lang])}</h3><p>{html.escape(f["text"][lang])}</p></li>'
-        for i, f in enumerate(SHEET["features"]))
-    return f"""<section class="wrap section" id="features" data-reveal aria-labelledby="features-title">
-  <h2 class="h2" id="features-title">{title}</h2>
-  <ul class="features" role="list">
-{lis}
-  </ul>
-</section>"""
-
-
-def shots(lang: str, prefix: str) -> str:
+def rows(lang: str) -> str:
     t = T[lang]
-    figs = "\n".join(
-        f'    <figure class="shot" data-shot="{prefix}assets/{f}" data-alt="{html.escape(alt)}" hidden><figcaption>{html.escape(cap)}</figcaption></figure>'
+    f = SHEET["features"]
+    story = "".join(f"<li>{e(x)}</li>" for x in t["story"])
+    visuals = [
+        f'<div class="card card--a zoom" aria-hidden="true"><div class="card__in"><div class="sheet"><div class="track"><b></b><b></b><b></b><b></b><u></u></div></div>'
+        f'<div class="sheet"><ul class="story">{story}</ul></div></div></div>',
+        f'<div class="card card--b zoom" aria-hidden="true"><div class="card__in"><div class="note">{e(t["note"])}</div>'
+        f'<div class="pair"><span class="chip chip--amber"><i></i>planner</span><span class="chip chip--btn">{e(t["as_prompt"])}</span></div></div></div>',
+        '<div class="card card--c zoom" aria-hidden="true"><div class="versions">'
+        '<div class="sheet"><span class="caption">v1</span><span class="chip"><i></i>concierge</span><span class="chip chip--amber"><i></i>planner</span></div>'
+        '<div class="sheet"><span class="caption">v2</span><span class="chip"><i></i>concierge</span><span class="chip chip--amber"><i></i>planner</span><span class="chip chip--green chip--new"><i></i>weather_agent</span></div>'
+        '</div></div>',
+    ]
+    out = []
+    for feat, visual in zip(f[1:4], visuals):
+        out.append(f"""  <article class="row">
+    <div class="row__text"><h2 class="h2">{e(feat['title'][lang])}</h2><p class="body">{e(feat['text'][lang])}</p></div>
+    {visual}
+  </article>""")
+    return "\n".join(out)
+
+
+def body(lang: str, prefix: str, other_href: str) -> str:
+    t = T[lang]
+    other = "fr" if lang == "en" else "en"
+    key = f'{SHEET["slug"]}-lang'
+    prompt = SHEET["agent_setup"]["prompt"][lang]
+    name = SHEET["name"]
+    nav = "".join(f'<a href="{h}">{e(label)}</a>' for h, label in t["nav"])
+    chips = "".join(f"<li>{i}{e(label)}</li>" for i, label in agents(lang))
+    steps = "".join(f"<li>{e(s)}</li>" for s in t["steps"])
+    shots = "\n".join(
+        f'    <figure class="shot zoom" data-shot="{prefix}assets/{f}" data-alt="{e(alt)}" hidden><figcaption class="small body">{e(cap)}</figcaption></figure>'
         for f, alt, cap in t["shots"])
-    return f"""<section class="wrap section" id="shots" data-shots hidden aria-labelledby="shots-title">
-  <h2 class="h2" id="shots-title">{t['shots_title']}</h2>
-  <div class="shots">
-{figs}
+    nb = lambda x: e(x).replace(" ?", "&nbsp;?").replace(" :", "&nbsp;:").replace("« ", "«&nbsp;").replace(" »", "&nbsp;»")  # French spacing
+    faq = "\n".join(f'      <details class="qa"><summary>{nb(q["q"][lang])}</summary><p>{nb(q["a"][lang])}</p></details>' for q in SHEET["faq"])
+    lang_link = (f'<a class="lang" href="{other_href}" data-lang="{other}" data-lang-key="{key}" hreflang="{other}" lang="{other}" '
+                 f'aria-label="{e(t["lang_label"])}">{t["lang_short"]}</a>')
+    return f"""<body>
+<a class="skip" href="#content">{e(t['skip'])}</a>
+<header class="top">
+  <div class="wrap top__in">
+    <a class="mark" href="./" aria-label="{e(name)}, {e(t['home'])}"><img src="{prefix}assets/icon-192.png" alt="" width="24" height="24"><span>{e(name)}</span></a>
+    <nav class="nav" aria-label="{e(t['nav_label'])}">{nav}</nav>
+    <div class="top__end"><a class="btn btn--primary btn--sm" href="{REPO}" rel="noopener">GitHub</a>{lang_link}</div>
   </div>
-</section>"""
+</header>
+<main id="content">
+<section class="wrap hero" aria-labelledby="title">
+  <canvas class="field field--css" aria-hidden="true"></canvas>
+  <div class="hero__in">
+    <p class="lockup"><img src="{prefix}assets/icon-192.png" alt="" width="32" height="32"><span>{e(name)}</span></p>
+    <h1 class="h1" id="title">{e(SHEET['headline'][lang])}</h1>
+    <p class="body">{e(SHEET['lede'][lang])}</p>
+    <div class="cta">{copy_button(lang, prompt, t['copy'])}{rotator(lang)}</div>
+    <p class="fine">{e(SHEET['platform'][lang])}</p>
+  </div>
+</section>
+<figure class="wrap stage">
+  <div class="board zoom"><div class="board__canvas">{board_svg(lang)}</div></div>
+  <figcaption class="caption">{e(t['caption'])}</figcaption>
+</figure>
+<section class="wrap statement" id="features" aria-label="{e(t['nav'][0][1])}">
+  <p><span>{e(t['statement'])}</span></p>
+</section>
+<section class="wrap rows" aria-label="{e(t['nav'][0][1])}">
+{rows(lang)}
+</section>
+<section class="wrap shots" id="shots" data-shots hidden aria-labelledby="shots-title">
+  <h2 class="h2" id="shots-title">{e(t['shots_title'])}</h2>
+{shots}
+</section>
+<section class="wrap setup" id="agent" aria-labelledby="agent-title">
+  <div class="setup__panel">
+    <h2 class="h2" id="agent-title">{e(t['setup_title'])}</h2>
+    <p class="body">{e(t['setup_text'])}</p>
+    <ul class="agents" role="list">{chips}</ul>
+    <pre class="prompt" aria-label="{e(t['prompt_label'])}" tabindex="0"><code>{e(prompt)}</code></pre>
+    {copy_button(lang, prompt, t['copy_short'])}
+    <ol class="steps small">{steps}</ol>
+  </div>
+</section>
+<section class="night" id="source" aria-labelledby="source-title">
+  <h2 class="h2" id="source-title">{e(t['open_title'])}</h2>
+  <p class="body">{e(t['open_text'])}</p>
+  <div class="cta"><a class="btn btn--white" href="{REPO}" rel="noopener">{e(t['open_btn'])}</a><a class="btn btn--glass" href="{SHEET['coffee']['url']}" rel="noopener" data-coffee>{e(t['coffee_btn'])}</a></div>
+</section>
+<section class="wrap faq" id="faq" aria-labelledby="faq-title">
+  <h2 class="h2" id="faq-title">{e(t['faq_title'])}</h2>
+  <div>
+{faq}
+  </div>
+</section>
+</main>
+<footer class="wrap foot">
+  <div class="foot__top">
+    <p class="foot__title">{e(t['foot_title'])}</p>
+    <nav class="foot__links" aria-label="{e(t['links_label'])}"><a href="{REPO}" rel="noopener">{e(t['source'])}</a><a href="{REPO}/issues" rel="noopener">{e(t['issues'])}</a><a href="{SHEET['coffee']['url']}" rel="noopener">{e(t['coffee_btn'])}</a><a href="{SHEET['links']['x']}" rel="noopener">{e(t['x'])}</a></nav>
+  </div>
+  <p class="wordmark" aria-hidden="true">{e(name)}</p>
+  <div class="foot__end"><span>© {date.today().year} Connected Mate. {e(t['made'])}</span><span>{e(t['indie'])}</span><a href="{LEGAL[lang]}">{e(t['legal'])}</a><a href="{other_href}" data-lang="{other}" data-lang-key="{key}" hreflang="{other}" lang="{other}">{e(t['other'])}</a></div>
+</footer>
+<script src="{prefix}lens.js" defer></script>
+</body>
+</html>
+"""
 
 
-def must(pattern: str, repl, text: str, flags=re.S) -> str:
-    out, n = re.subn(pattern, repl, text, count=1, flags=flags)
+def must(pattern: str, repl, text: str) -> str:
+    out, n = re.subn(pattern, repl, text, count=1, flags=re.S)
     if n != 1:
         raise SystemExit(f"customize_site: pattern not found: {pattern[:60]}")
     return out
 
 
-def customize(path: Path, lang: str, prefix: str) -> None:
+def customize(path: Path, lang: str, prefix: str, other_href: str) -> None:
     s = path.read_text(encoding="utf-8")
     if "lens.css" in s:
         raise SystemExit(f"{path} already customised: re-run scaffold.py --force first")
-    s = must(r'(<link rel="stylesheet" href="[^"]*style\.css[^"]*">)',
-             lambda m: m.group(1) + f'\n<link rel="stylesheet" href="{prefix}lens.css">', s)
-    s = must(r'(<script src="[^"]*site\.js"[^>]*></script>)',
-             lambda m: m.group(1) + f'\n<script src="{prefix}lens.js" defer></script>', s)
-    # hero: one button + the rotating agents, then the illustration
-    s = must(r'<div class="cta">(<button class="btn btn--go.*?</button>).*?</div>\s*\n(\s*<p class="fine">)',
-             lambda m: f'<div class="cta">{m.group(1)}{rotator(lang)}</div>\n{m.group(2)}', s)
-    s = must(r'<figure class="hero__visual">.*?</figure>',
-             lambda m: (f'<figure class="board"><div class="board__frame">{board_svg(lang)}</div>'
-                        f'<figcaption>{html.escape(T[lang]["caption"])}</figcaption></figure>'), s)
-    # features with their small drawings, then the screenshot slots
-    title = re.search(r'id="features-title">(.*?)</h2>', s).group(1)
-    s = must(r'<section class="wrap section" id="features".*?</section>',
-             lambda m: features(lang, title) + "\n" + shots(lang, prefix), s)
-    # agent setup comes after "what it does" (the hero already carries the button)
-    agent = re.search(r'<section class="wrap section agent-setup".*?</section>\n', s, re.S).group(0)
-    s = s.replace(agent, "", 1)
-    s = must(r'(<section class="wrap section panel" id="source")', lambda m: agent + m.group(1), s)
-    # open source + coffee side by side
-    s = must(r'(<section class="wrap section panel" id="source".*?</section>\s*<section class="wrap section coffee".*?</section>)',
-             lambda m: '<div class="wrap duo">\n' + m.group(1) + '\n</div>', s)
-    if lang == "fr":  # "ADK Lens" is an "outil": masculine in French
-        s = s.replace("Ce qu'elle fait", "Ce que ça fait").replace("est gratuite et le restera", "est gratuit et le restera").replace("Si elle te rend service", "S'il te rend service")
-    path.write_text(s, encoding="utf-8")
+    head = s.split("<body>", 1)[0]
+    head = must(r'<link rel="stylesheet" href="[^"]*style\.css[^"]*">\n?',
+                lambda m: (f'<link rel="preload" href="{prefix}assets/fonts/google-sans-flex-latin.woff2" as="font" type="font/woff2" crossorigin>\n'
+                           f'<link rel="stylesheet" href="{prefix}lens.css">\n'), head)
+    head = must(r'<style>@media \(prefers-color-scheme.*?</style>\n?', lambda m: "", head)
+    path.write_text(head + body(lang, prefix, other_href), encoding="utf-8")
     print(f"customised {path.relative_to(ROOT)}")
 
 
 def main() -> int:
     default = SHEET["default_lang"]
     other = "fr" if default == "en" else "en"
-    customize(DOCS / "index.html", default, "")
-    customize(DOCS / other / "index.html", other, "../")
+    customize(DOCS / "index.html", default, "", f"{other}/")
+    customize(DOCS / other / "index.html", other, "../", "../")
+    # 404 page: same stylesheet, same classes
+    p = DOCS / "404.html"
+    s = p.read_text(encoding="utf-8")
+    s = (s.replace("style.css", "lens.css").replace('class="display"', 'class="h1"').replace('class="lede"', 'class="body"')
+          .replace("btn btn--go", "btn btn--primary"))
+    p.write_text(s, encoding="utf-8")
+    for leftover in ("style.css", "site.js"):
+        (DOCS / leftover).unlink(missing_ok=True)
     return 0
 
 
