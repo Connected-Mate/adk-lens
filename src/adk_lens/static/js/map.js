@@ -28,6 +28,7 @@ export function createMap(stage, opts) {
   let userFitted = false;
   let travelRaf = 0;
   let lastFrameKey = '';
+  let activeId = null;
   const viewListeners = [];
 
   function applyView() {
@@ -50,10 +51,13 @@ export function createMap(stage, opts) {
     const r = stage.getBoundingClientRect();
     if (!r.width || !lay.width) return;
     const narrow = r.width < 720;
-    const pad = narrow ? { top: 70, right: 16, bottom: 150, left: 16 } : PAD;
+    const inset = !narrow && opts.inset ? opts.inset() : 0;
+    const pad = narrow ? { top: 70, right: 16, bottom: 150, left: 16 } : { ...PAD, right: PAD.right + inset };
     const k = Math.min((r.width - pad.left - pad.right) / lay.width, (r.height - pad.top - pad.bottom) / Math.max(lay.height, 1), 1.1);
-    view.k = Math.max(0.08, k);
-    view.x = pad.left + (r.width - pad.left - pad.right - lay.width * view.k) / 2;
+    // On a phone a wide map would be unreadable: keep it legible and let it scroll sideways.
+    view.k = Math.max(narrow ? 0.5 : 0.08, k);
+    const free = r.width - pad.left - pad.right - lay.width * view.k;
+    view.x = free >= 0 ? pad.left + free / 2 : pad.left;
     view.y = pad.top + (r.height - pad.top - pad.bottom - lay.height * view.k) / 2;
     if (animated) smooth();
     applyView();
@@ -87,7 +91,8 @@ export function createMap(stage, opts) {
     const x1 = b.x * view.k + view.x, y1 = b.y * view.k + view.y;
     const x2 = x1 + b.w * view.k, y2 = y1 + b.h * view.k;
     let dx = 0, dy = 0;
-    if (x1 < 60) dx = 60 - x1; else if (x2 > r.width - 60) dx = r.width - 60 - x2;
+    const right = r.width - 60 - (r.width >= 720 && opts.inset ? opts.inset() : 0);
+    if (x1 < 60) dx = 60 - x1; else if (x2 > right) dx = right - x2;
     if (y1 < 80) dy = 80 - y1; else if (y2 > r.height - 160) dy = r.height - 160 - y2;
     if (!dx && !dy) return;
     view.x += dx; view.y += dy;
@@ -202,6 +207,7 @@ export function createMap(stage, opts) {
 
   function setFrame(frame, o = {}) {
     const hasRun = !!frame.step;
+    activeId = hasRun ? frame.active : null;
     world.classList.toggle('has-run', hasRun);
     for (const [id, el] of nodeEls) {
       const active = frame.active === id;
@@ -347,7 +353,11 @@ export function createMap(stage, opts) {
   let resizeT = 0;
   new ResizeObserver(() => {
     clearTimeout(resizeT);
-    resizeT = setTimeout(() => { if (!userFitted) fit(false); }, 60);
+    resizeT = setTimeout(() => {
+      if (userFitted) return;
+      fit(false);
+      if (activeId) ensureVisible(activeId);
+    }, 60);
   }).observe(stage);
 
   applyView();
@@ -356,6 +366,7 @@ export function createMap(stage, opts) {
     setTopology, setFrame, select, toWorld, centerWorld,
     fit: () => { userFitted = false; fit(true); },
     zoomBy: (f) => { userFitted = true; smooth(); zoomAt(f); },
+    reveal: ensureVisible,
     box: (id) => lay.boxes.get(id),
     boxes: () => lay.boxes,
     nodeEl: (id) => nodeEls.get(id),

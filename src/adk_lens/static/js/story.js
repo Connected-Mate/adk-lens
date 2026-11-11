@@ -48,7 +48,7 @@ export function sentence(step) {
       const args = argsShort(ev.args);
       return args ? { key: 's.tool.args', vars: { agent, tool: step.tool, args } } : { key: 's.tool', vars: { agent, tool: step.tool } };
     }
-    case 'tool_result': return { key: 's.tool_result', vars: { tool: step.tool, agent }, body: bodyOf(ev.result), meta: fmtDuration(ev.duration_ms) };
+    case 'tool_result': return { key: step.agentTool ? 's.tool_result.agent' : 's.tool_result', vars: { tool: step.tool, agent }, body: bodyOf(ev.result), meta: fmtDuration(ev.duration_ms) };
     case 'handoff': return { key: 's.handoff', vars: { agent, target: step.target } };
     case 'memory': return { key: 's.memory', vars: { agent, keys: step.keys.join(', ') }, body: bodyOf(step.delta) };
     case 'file': return { key: 's.file', vars: { agent, files: step.files.join(', ') } };

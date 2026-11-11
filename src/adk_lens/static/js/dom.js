@@ -83,7 +83,7 @@ export function pretty(value) {
 }
 
 export function fmtDuration(ms) {
-  if (typeof ms !== 'number' || !isFinite(ms)) return '';
+  if (typeof ms !== 'number' || !isFinite(ms) || ms < 1) return '';
   if (ms < 1000) return `${Math.round(ms)} ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)} s`;
   return `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`;

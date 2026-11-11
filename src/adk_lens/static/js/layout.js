@@ -8,8 +8,8 @@ const TOOLS = new Set(['tool', 'toolset']);
 
 const AG = { w: 208, h: 72 };
 const TL = { w: 172, h: 38, gap: 10, perCol: 6, indent: 26 };
-const US = { w: 168, h: 72 };
-const GAP_X = 120;
+const US = { w: 196, h: 72 };
+const GAP_X = 132;
 const GAP_Y = 34;
 const PAD = 26;
 const HEAD = 46;
@@ -261,5 +261,12 @@ function route(a, b, kind, extra, boxes) {
 
 // A free path between two boxes, for journeys that have no drawn connector.
 export function freePath(a, b) {
+  const ax = a.x + a.w / 2, bx = b.x + b.w / 2;
+  if (Math.abs(ax - bx) > 260) {
+    // Far apart (an answer going back to the person): a calm arc under the map.
+    const ay = a.y + a.h, by = b.y + b.h;
+    const dip = Math.max(ay, by) + Math.min(220, 70 + Math.abs(ax - bx) * 0.16);
+    return `M${ax} ${ay} C${ax} ${dip} ${bx} ${dip} ${bx} ${by}`;
+  }
   return route(a, b, 'free', {}, new Map()).d;
 }

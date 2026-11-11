@@ -129,6 +129,10 @@ export function ingest(ev, bulk = false) {
     run.userMessage = str(ev.user_message) || textOfParts(ev.parts);
     run.startTs = Number(ev.ts) || run.startTs;
     run.status = 'live';
+    // A session handles one request at a time: an older one still "live" was cut short.
+    for (const other of store.runs.values()) {
+      if (other !== run && other.app === app && other.session === run.session && other.status === 'live') other.status = 'stalled';
+    }
   } else if (type === 'run_end') {
     if (run.status !== 'error') run.status = 'done';
     run.duration = Number(ev.duration_ms) || undefined;
@@ -298,7 +302,7 @@ function buildSteps(run) {
         const a = agentNodeId(app, agentName || top);
         const tid = toolNodeId(app, agentName || top, ev.tool, false);
         const real = steps.slice().reverse().find((x) => x.kind === 'tool' && x.ev.call_id === ev.call_id && ev.call_id);
-        add(ev, 'tool_result', { node: a, from: real ? real.node : tid, to: a, toolNode: real ? real.node : tid, agent: agentName || top, tool: str(ev.tool) });
+        add(ev, 'tool_result', { node: a, from: real ? real.node : tid, to: a, toolNode: real ? real.node : tid, agent: agentName || top, tool: str(ev.tool), agentTool: !!(real && real.agentTool) });
         break;
       }
       case 'tool_error': {

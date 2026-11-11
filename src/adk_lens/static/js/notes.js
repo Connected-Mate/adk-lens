@@ -107,7 +107,7 @@ export function createNotes(map, stage, opts) {
   function pos(item) {
     if (item.target && item.target.type === 'node') {
       const b = map.box(item.target.id);
-      if (b) return { x: b.x + b.w - 30 + (item.dx || 0), y: b.y - 96 + (item.dy || 0) };
+      if (b) return { x: b.x + b.w - 24 + (item.dx || 0), y: b.y - 132 + (item.dy || 0) };
     }
     return { x: item.x || 0, y: item.y || 0 };
   }

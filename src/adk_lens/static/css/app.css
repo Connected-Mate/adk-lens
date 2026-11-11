@@ -164,6 +164,12 @@ b { font-weight: 600; }
 }
 .top-left, .top-right { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; flex: 1 1 0; }
 .top-right { justify-content: flex-end; }
+.top-right > * { flex: none; }
+.copy-short { display: none; }
+@media (max-width: 1180px) {
+  .copy-long { display: none; }
+  .copy-short { display: inline; }
+}
 .brand { display: flex; align-items: center; gap: 10px; margin-right: var(--space-sm); }
 .brand-name { font-size: 17.5px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; }
 .logo { width: 28px; height: 28px; }
@@ -368,11 +374,11 @@ b { font-weight: 600; }
 .dot.tone-answer, .dot-halo.tone-answer { fill: var(--ink); }
 
 /* versions compared */
-.d-added { border: 2px solid var(--green) !important; }
+.node.d-added, .frame.d-added { border: 2px solid var(--green) !important; }
 .node.d-added { background: var(--tint-green); }
-.d-removed { border: 2px dashed var(--red) !important; opacity: 0.6; }
+.node.d-removed, .frame.d-removed { border: 2px dashed var(--red) !important; opacity: 0.6; }
 .d-removed .node-name, .d-removed .frame-name { text-decoration: line-through; }
-.d-changed { border: 2px solid var(--yellow) !important; }
+.node.d-changed, .frame.d-changed { border: 2px solid var(--yellow) !important; }
 .node.d-changed { background: var(--tint-yellow); }
 .diff-tag {
   display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--pill); font-size: 11.5px; font-weight: 600; white-space: nowrap;
@@ -501,6 +507,7 @@ b { font-weight: 600; }
 .cap-body:empty { display: none; }
 .caption[data-tone="error"] .cap-line { color: var(--red); }
 .dock.no-run .player { display: none; }
+.dock.in-story:not(.no-run) .caption { display: none; }
 .player {
   display: flex; align-items: center; gap: 4px; width: 100%; padding: 6px 12px 6px 8px; border-radius: var(--pill);
   background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-3);
@@ -536,10 +543,8 @@ b { font-weight: 600; }
   animation: st-in 420ms var(--ease) backwards; animation-delay: calc(var(--i, 0) * 24ms);
 }
 @keyframes st-in { from { opacity: 0; transform: translateY(8px); } }
-.st + .st { box-shadow: 0 -1px 0 var(--line-2); }
 .st.is-future { opacity: 0.36; }
-.st.is-current { background: var(--container); box-shadow: none; }
-.st.is-current + .st { box-shadow: none; }
+.st.is-current { background: var(--container); }
 .st-ico { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--container-2); color: var(--ink-2); transition: background-color 300ms var(--ease), color 300ms var(--ease); }
 .st.is-current .st-ico { background: var(--ink); color: var(--bg); }
 .tone-tool .st-ico, .tone-tool_result .st-ico { color: var(--green); background: var(--tint-green); }
@@ -658,7 +663,7 @@ b { font-weight: 600; }
 .badge.is-live { background: var(--tint-red); }
 .badge.is-error { background: var(--tint-red); color: var(--red); }
 .toast {
-  position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 16px); z-index: 60; padding: 10px 18px; border-radius: var(--pill);
+  position: fixed; left: 50%; top: 100px; transform: translate(-50%, -12px); z-index: 60; padding: 10px 18px; border-radius: var(--pill);
   background: var(--ink); color: var(--bg); font-size: 14.5px; box-shadow: var(--shadow-3); opacity: 0; pointer-events: none;
   transition: opacity 200ms var(--ease), transform 300ms var(--ease);
 }
@@ -702,7 +707,11 @@ body.is-empty .dock, body.is-empty .palette, body.is-empty .zoom { display: none
 /* ---------- small screens ---------- */
 @media (max-width: 760px) {
   .top { flex-wrap: wrap; padding: 6px 10px 8px; gap: 8px; }
-  .top-left, .top-right { flex: 0 1 auto; gap: 6px; }
+  .top-left { flex: 1 1 0; gap: 6px; }
+  .top-right { flex: none; gap: 4px; }
+  .runs-btn .chip-count { display: none; }
+  .app-btn { max-width: 34vw; }
+  .ver-btn { flex: none; }
   .brand { margin-right: 0; }
   .brand-name, .copy-long, .copy-short, .runs-btn .chip-label { display: none; }
   .chip-btn { padding: 0 10px; max-width: 42vw; }

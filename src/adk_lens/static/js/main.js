@@ -30,6 +30,7 @@ let es = null;
 let retryT = 0;
 let refreshRaf = 0;
 let toastT = 0;
+let notesLocalOnly = false;
 
 // ---------------------------------------------------------------- shell
 
@@ -138,6 +139,7 @@ function buildShell() {
 
   map = createMap(el.stage, {
     canPan: () => notes.tool() === 'select',
+    inset: () => (ui.panel ? 384 : 0),
     onNode: (id) => openNode(id),
     onBackground: () => { if (!notes.deselect() && ui.panel && ui.panel.type === 'node') closePanel(); },
   });
@@ -153,7 +155,12 @@ function buildShell() {
     buildPrompt: () => promptText(),
     push: (doc) => {
       if (ui.fixture) return;
-      fetch('/api/notes', { method: 'PUT', headers: HEAD, body: JSON.stringify(doc) }).catch(() => {});
+      fetch('/api/notes', { method: 'PUT', headers: HEAD, body: JSON.stringify(doc) })
+        .then((r) => { if (!r.ok) throw new Error('refused'); notesLocalOnly = false; })
+        .catch(() => {
+          if (!notesLocalOnly) toast(t('note.saved.local'));
+          notesLocalOnly = true;
+        });
     },
   });
   notes.setTool('select');
@@ -165,10 +172,8 @@ function buildShell() {
       if (!run) return;
       const sn = sentence(st);
       const item = notes.addStepComment(run, st, { runTitle: short(run.userMessage, 120), sentence: sentenceText(st), content: short(sn.body || '', 500) });
-      requestAnimationFrame(() => {
-        const field = el.story.querySelector(`[data-note="${CSS.escape(item.id)}"] textarea`);
-        if (field) field.focus();
-      });
+      const field = el.story.querySelector(`[data-note="${CSS.escape(item.id)}"] textarea`);
+      if (field) field.focus();
     },
     fillNotes: (container, runId, st) => notes.fillStepNotes(container, runId, st),
   });
@@ -295,7 +300,7 @@ function renderTop() {
   const n = ui.app ? notes.forApp(ui.app).length : 0;
   clear(el.copyBtn);
   el.copyBtn.hidden = !ui.app;
-  put(el.copyBtn, icon('copy', 17), h('span', { class: 'copy-long', text: t('top.copy') }), n ? h('span', { class: 'chip-count', text: String(n) }) : null);
+  put(el.copyBtn, icon('copy', 17), h('span', { class: 'copy-long', text: t('top.copy') }), h('span', { class: 'copy-short', text: t('top.copy.short') }), n ? h('span', { class: 'chip-count', text: String(n) }) : null);
   el.palette.hidden = !ui.app || ui.view !== 'journey';
   el.zoom.hidden = !ui.app || ui.view !== 'journey';
 }
@@ -316,7 +321,7 @@ function renderBanner() {
     el.banner.dataset.tone = 'info';
     put(el.banner, icon('layers', 17), h('span', { text: t('versions.viewing', { v: ver.v }) }),
       btn('linkish', t('versions.back'), [t('versions.back')], () => { ui.version = null; renderAll(); }, { noTitle: true }));
-  } else if (ui.fixture && !isEmpty()) {
+  } else if (ui.fixture && !isEmpty() && ui.view === 'journey') {
     el.banner.dataset.tone = 'quiet';
     put(el.banner, h('span', { text: t('conn.fixture') }));
   } else show = false;
@@ -353,9 +358,10 @@ function renderRun(o = {}) {
   const comparing = ui.compare !== null;
   const frame = run && !comparing ? frameAt(run, ui.idx) : frameAt(null, -1);
   map.setFrame(frame, { animate: o.animate !== false && ui.view === 'journey', duration: Math.min(900, 720 / ui.speed), follow: ui.view === 'journey' });
+  el.story.hidden = ui.view !== 'linear' || !ui.app;
+  el.dock.classList.toggle('in-story', ui.view === 'linear');
   story.update(run, ui.idx, { instant: o.instant, notes: o.notes, force: o.force });
   renderPlayer();
-  el.story.hidden = ui.view !== 'linear' || !ui.app;
   el.stage.classList.toggle('is-behind', ui.view !== 'journey');
   el.stage.inert = ui.view !== 'journey';
 }
@@ -395,7 +401,7 @@ function renderPlayer() {
   el.speed.textContent = `${ui.speed}×`;
   el.speed.setAttribute('aria-label', t('player.speed', { s: ui.speed }));
   const liveRun = runs.find((r) => r.status === 'live');
-  el.liveBtn.hidden = !liveRun || (liveRun.id === ui.runId && ui.follow && atEnd) ;
+  el.liveBtn.hidden = ui.follow || !(liveRun || (runs[0] && runs[0].id !== ui.runId));
   el.player.classList.toggle('is-live', run.status === 'live');
 }
 
@@ -419,12 +425,19 @@ function setIdx(i, o = {}) {
 
 function schedule() {
   clearTimeout(playTimer);
+  playTimer = 0;
   if (!ui.playing) return;
   const run = currentRun();
   if (!run) { ui.playing = false; return; }
   const steps = stepsOf(run);
   if (ui.idx >= steps.length - 1) {
-    if (run.status === 'live') { renderPlayer(); return; } // wait for the next event
+    const next = ui.follow ? nextRunAfter(run) : null;
+    // Still live: wait for its next event, unless it went silent and another request started.
+    if (run.status === 'live' && !(next && next.startTs > (run.lastTs || 0) + 5)) { renderPlayer(); return; }
+    if (next) {
+      playTimer = setTimeout(() => selectRun(next.id, { at: 'start', play: true }), 1300 / ui.speed);
+      return;
+    }
     ui.playing = false;
     renderPlayer();
     return;
@@ -434,9 +447,21 @@ function schedule() {
   let delay = (cur && (cur.kind === 'answer' || cur.kind === 'ask') ? 1500 : 1050) / ui.speed;
   if (run.status === 'live' && ui.follow && behind > 3) delay = Math.min(delay, 420);
   playTimer = setTimeout(() => {
+    playTimer = 0;
     setIdx(ui.idx + 1);
     schedule();
   }, delay);
+}
+
+// When following, requests are shown one after the other, never cut short.
+function nextRunAfter(run) {
+  const later = runsOf(run.app).filter((r) => r.id !== run.id && r.startTs >= run.startTs && later_than(r, run)).reverse();
+  if (!later.length) return null;
+  return later.length > 3 ? later[later.length - 1] : later[0];
+}
+function later_than(a, b) {
+  if (a.startTs !== b.startTs) return a.startTs > b.startTs;
+  return (a.events[0]?.seq || 0) > (b.events[0]?.seq || 0);
 }
 
 function play() {
@@ -485,10 +510,11 @@ function selectRun(id, o = {}) {
 }
 
 function followLive() {
-  const live = runsOf(ui.app).find((r) => r.status === 'live');
-  if (!live) return;
+  const runs = runsOf(ui.app);
+  const target = runs.find((r) => r.status === 'live') || runs[0];
+  if (!target) return;
   ui.follow = true;
-  selectRun(live.id, { play: true });
+  selectRun(target.id, { at: target.status === 'live' ? 'end' : 'start', play: true });
 }
 
 function setView(v) {
@@ -496,6 +522,7 @@ function setView(v) {
   lsSet('adk-lens.view', v);
   if (v !== 'journey') notes.setTool('select');
   renderTop();
+  renderBanner();
   renderRun({ animate: false, instant: true });
   if (v === 'journey') requestAnimationFrame(() => map.fit());
 }
@@ -563,7 +590,8 @@ function openRuns(anchor) {
     if (!runs.length) put(node, h('p', { class: 'pop-empty', text: t('top.runs.none') }));
     for (const r of runs) {
       const badge = r.status === 'live' ? h('span', { class: 'badge is-live' }, h('span', { class: 'live-dot' }), t('runs.live'))
-        : r.status === 'error' ? h('span', { class: 'badge is-error', text: t('runs.failed') }) : null;
+        : r.status === 'error' ? h('span', { class: 'badge is-error', text: t('runs.failed') })
+          : r.status === 'stalled' ? h('span', { class: 'badge', text: t('runs.stalled') }) : null;
       put(node, popItem([
         h('span', { class: 'pop-main', text: short(r.userMessage, 90) || t('runs.untitled') }),
         h('span', { class: 'pop-sub' }, badge, h('span', { text: [ago(r.startTs), t('runs.steps', { n: stepsOf(r).length })].filter(Boolean).join(' · ') })),
@@ -604,6 +632,7 @@ function startCompare(base) {
   ui.compare = base;
   ui.panel = { type: 'diff' };
   renderAll();
+  map.fit();
 }
 
 function stopCompare() {
@@ -670,6 +699,7 @@ function closePanel(refocus) {
   map.select(null);
   if (refocus && was && was.type === 'node') { const n = map.nodeEl(was.id); if (n) n.focus({ preventScroll: true }); }
   if (refocus && was && was.type === 'prompt') el.copyBtn.focus({ preventScroll: true });
+  if (was && was.type !== 'node' && ui.view === 'journey') map.fit();
 }
 
 function panelHead(title, sub, ico) {
@@ -701,6 +731,7 @@ function openNode(id) {
   ui.panel = { type: 'node', id };
   renderPanel();
   map.select(id);
+  map.reveal(id);
   el.panel.focus({ preventScroll: true });
 }
 
@@ -788,6 +819,7 @@ async function copyPrompt() {
   const had = ui.app && notes.forApp(ui.app).length > 0;
   ui.panel = { type: 'prompt' };
   renderPanel();
+  if (ui.view === 'journey') map.fit(); // make room so the notes stay visible next to the panel
   if (had) await doCopy();
   else el.panel.focus({ preventScroll: true });
 }
@@ -890,18 +922,15 @@ scheduleRefresh.runs = new Set();
 function onRunsTouched(ids) {
   const wasEmpty = document.body.classList.contains('is-empty');
   if (wasEmpty || !ui.app) { renderAll({ refit: true }); }
-  let newest = null;
-  for (const id of ids) {
-    const r = store.runs.get(id);
-    if (r && r.status === 'live' && r.id !== ui.runId && (!newest || r.startTs > newest.startTs)) newest = r;
-  }
   const cur = currentRun();
-  const idle = !cur || (ui.follow && (cur.status !== 'live'));
-  if (newest && idle && (newest.app === ui.app || !cur)) {
-    ui.follow = true;
-    selectRun(newest.id, { at: 'start', play: true });
-    return;
+  if (ui.follow && !cur) {
+    const first = ui.app ? runsOf(ui.app)[0] : null;
+    if (first) { selectRun(first.id, { at: 'start', play: true }); return; }
+  } else if (ui.follow && cur && !ui.playing && ui.idx >= stepsOf(cur).length - 1 && cur.status !== 'live') {
+    const next = nextRunAfter(cur);
+    if (next) { selectRun(next.id, { at: 'start', play: true }); return; }
   }
+  if (ui.follow && ui.playing && cur && cur.status === 'live' && ui.idx >= stepsOf(cur).length - 1 && !playTimer) schedule();
   if (cur && ids.includes(cur.id)) {
     renderRun({ instant: true });
     if (ui.playing) { if (ui.idx >= stepsOf(cur).length - 2 || !playTimer) schedule(); }
@@ -945,7 +974,10 @@ function setConn(state) {
   const was = ui.conn;
   ui.conn = state;
   renderBanner();
-  if (state === 'live' && was === 'lost') toast(t('conn.back'));
+  if (state === 'live' && was === 'lost') {
+    toast(t('conn.back'));
+    if (notesLocalOnly) notes.flush(); // send what was written while the hub was away
+  }
 }
 
 function openStream() {
