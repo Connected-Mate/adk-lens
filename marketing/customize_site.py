@@ -45,9 +45,9 @@ T = {
             ("shot-notes.png", "ADK Lens screenshot: notes on the board.", "Your notes, ready to copy as a prompt."),
         ],
         "setup_title": "Set it up with your coding agent",
-        "setup_text": "Copy this prompt and paste it into your agent. It installs ADK Lens, runs the demo and checks that everything works.",
+        "setup_text": "Copy the prompt and paste it into your coding agent, in your project folder. It finds your ADK project and puts ADK Lens on top. No ADK project yet? It offers to create your first agent.",
         "prompt_label": "Setup prompt",
-        "steps": ["Copy the prompt", "Paste it into your agent", "It installs and checks"],
+        "steps": ["Copy the prompt", "Paste it into your agent", "It finds your agents, or creates one"],
         "open_title": "Open source. Free.",
         "open_text": "MIT licence. The code is public: read it, reuse it, improve it. If ADK Lens helps you, a coffee keeps me building.",
         "open_btn": "See the code on GitHub", "coffee_btn": "Buy me a coffee",
@@ -77,9 +77,9 @@ T = {
             ("shot-notes.png", "Capture d'ADK Lens : des notes sur le tableau.", "Tes notes, prêtes à copier comme prompt."),
         ],
         "setup_title": "Installe-le avec ton agent de code",
-        "setup_text": "Copie ce prompt et colle-le dans ton agent. Il installe ADK Lens, lance la démo et vérifie que tout marche.",
+        "setup_text": "Copie le prompt et colle-le dans ton agent de code, dans le dossier de ton projet. Il trouve ton projet ADK et pose ADK Lens par-dessus. Pas encore de projet ADK ? Il te propose de créer ton premier agent.",
         "prompt_label": "Prompt d'installation",
-        "steps": ["Copie le prompt", "Colle-le dans ton agent", "Il installe et vérifie"],
+        "steps": ["Copie le prompt", "Colle-le dans ton agent", "Il trouve tes agents, ou en crée un"],
         "open_title": "Open source. Gratuit.",
         "open_text": "Licence MIT. Le code est public : lis-le, réutilise-le, améliore-le. Si ADK Lens te rend service, un café m'aide à continuer.",
         "open_btn": "Voir le code sur GitHub", "coffee_btn": "Offrir un café",
@@ -224,7 +224,6 @@ def body(lang: str, prefix: str, other_href: str) -> str:
     <h2 class="h2" id="agent-title">{e(t['setup_title'])}</h2>
     <p class="body">{e(t['setup_text'])}</p>
     <ul class="agents" role="list">{chips}</ul>
-    <pre class="prompt" aria-label="{e(t['prompt_label'])}" tabindex="0"><code>{e(prompt)}</code></pre>
     {copy_button(lang, prompt, t['copy_short'])}
     <ol class="steps small">{steps}</ol>
   </div>

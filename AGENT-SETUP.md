@@ -6,9 +6,8 @@
 > and **ask before any sensitive action** (password prompt, admin rights, deleting or overwriting files,
 > sending data anywhere). Never print, log or store secrets (API keys, `.env` content).
 
-Verification status of this guide (11 Nov 2026, version 0.1.0): steps 3, 4 and the `status` / `stop` commands
-were run for real from a local checkout. Steps marked **(not verified yet)** were written from the code
-and have not been run end to end.
+Verification status of this guide (11 Nov 2026, version 0.1.0): install, demo, proof, always-on mode and the
+`status` / `stop` commands were run for real. Step 2b (creating a first agent) was run with a placeholder key only: the files are created, the model call was not tested.
 
 ## 0. What ADK Lens is
 
@@ -20,7 +19,32 @@ It does **not** change the person's agent code. On the machine it adds: the `adk
 `http://127.0.0.1:4790`, and a data folder `~/.adk-lens/`. Nothing is sent outside the machine by ADK Lens.
 It is an independent open-source project (MIT), not affiliated with Google.
 
-## 1. Check prerequisites
+## 1. Look for an ADK project where you are
+
+Work in the folder where the person pasted the prompt (your current working directory). Do not search their whole disk.
+
+Signs of a Python ADK project (any one is enough):
+
+```bash
+grep -rIl --include="*.py" -E "from google\.adk|import google\.adk" . 2>/dev/null | grep -v -E "/(\.venv|venv|node_modules|site-packages)/" | head -20
+grep -rIl -E "google-adk" --include="pyproject.toml" --include="requirements*.txt" --include="uv.lock" . 2>/dev/null | head
+find . -name "root_agent.yaml" -not -path "*/node_modules/*" -not -path "*/.venv/*" | head
+```
+
+An agent folder usually looks like `my_agent/agent.py` (defining `root_agent`) with `__init__.py` and `.env`.
+Read `.env` files only to know they exist: never print or copy their content.
+
+Then follow ONE path:
+
+- **Path A: you found a Python ADK project.** Tell the person which agents you found (folder names), then go to step 2
+  and install ADK Lens in THAT project's Python environment. You must not edit, move or reformat any of their files.
+- **Path B: you found nothing.** Say so in one sentence. Then offer two choices and wait for the answer:
+  1. *"I install Google ADK and create a first agent with you, with ADK Lens on it"* (step 2, then step 2b);
+  2. *"I just show you the demo"* (step 2, then step 3; no API key needed).
+- **ADK in another language** (TypeScript `@google/adk`, Go `google.golang.org/adk`, Java `com.google.adk`): ADK Lens
+  covers Python only for now. Say it plainly, and offer the demo (Path B, choice 2).
+
+## 1b. Check prerequisites
 
 - Python 3.10 or later: `python3 --version` → `Python 3.10` or higher.
 - pip: `python3 -m pip --version` → prints a version.
@@ -28,30 +52,48 @@ It is an independent open-source project (MIT), not affiliated with Google.
 - Port 4790 free, or already used by ADK Lens: `curl -s -m 2 http://127.0.0.1:4790/api/ping`
   → no answer (free) or `{"adk_lens": "...", "pid": ...}` (already running, fine). Anything else: tell the person
   another program uses the port and use `export ADK_LENS_PORT=4791` for every command below.
-- An ADK project is **optional**. The demo needs none, and no API key.
 
 If something is missing, explain it in one sentence and offer to install it (ask first).
 
-## 2. Install **(not verified yet: needs the public repository)**
+## 2. Install
 
 Choose the Python environment:
 
-- **The person has an ADK project** (a folder with agents and `google-adk` installed): activate that project's
-  environment and install there, so the lens sees their agents.
-- **No ADK project** (they only want to try): create a dedicated environment.
+- **Path A**: use the project's own environment (its `.venv`, or `uv run`, or whatever the project already uses),
+  so the lens sees their agents. If the project has no environment yet, ask before creating `.venv` in it.
+- **Path B**: create a dedicated environment in the current folder.
 
 ```bash
-# only when there is no ADK project environment to reuse
-python3 -m venv ~/.adk-lens/venv
-source ~/.adk-lens/venv/bin/activate
+# Path B only
+python3 -m venv .venv
+source .venv/bin/activate
 
-# in both cases
+# both paths, inside the chosen environment
 python -m pip install "git+https://github.com/Connected-Mate/adk-lens"
 adk-lens version        # expected: adk-lens 0.1.0 (or newer)
 ```
 
 Running the install twice is safe (pip upgrades in place). Never use `sudo pip`.
-`google-adk` (1.7.0 or later) is installed automatically as a dependency.
+`google-adk` (1.7.0 or later) is installed automatically as a dependency if it is missing.
+Do not add `adk-lens` to the project's dependency files unless the person asks: it is a viewing tool, their app does not need it.
+
+## 2b. Path B, choice 1: create a first agent
+
+Ask the person two things, in plain words:
+
+1. A name for the agent (letters, digits and underscores, for example `my_first_agent`).
+2. Which model access they have: a Google AI Studio API key (https://aistudio.google.com/apikey), or a Google Cloud
+   project with Vertex AI. If they have neither, stop here and show the demo instead (step 3): it needs no key.
+
+Then:
+
+```bash
+adk create my_first_agent --model gemini-flash-latest --api_key "<the key they give you>"
+```
+
+`adk create` writes `my_first_agent/agent.py`, `__init__.py` and `.env` (the key goes in `.env`). Never echo the key back,
+never commit `.env`; if the folder is a git repository, make sure `.env` is ignored. Offer to adapt the agent's
+instruction to what the person wants it to do, then continue with step 4 (Path A instructions apply from here).
 
 ## 3. Run the demo (verified)
 
@@ -69,6 +111,8 @@ not the text of prompts and answers).
 
 ## 4. Prove it works (verified)
 
+First the board itself (run step 3 before, also on Path A: it is the quickest proof, about one minute):
+
 ```bash
 curl -s http://127.0.0.1:4790/api/ping
 # expected: {"adk_lens": "0.1.0", "pid": <number>}
@@ -80,9 +124,27 @@ adk-lens status
 # expected: Board: running at http://127.0.0.1:4790
 ```
 
-If all three match, tell the person, in two plain sentences: ADK Lens is installed, the board is at
-http://127.0.0.1:4790 (they can open it in their browser, or run `adk-lens open`), and it can be removed
-with step 6.
+Then, **when the person has agents (Path A, or after step 2b)**, show THEIR agents on the board. From the folder that
+contains the agent folders (the one where they would run `adk web`), start the usual ADK server with the lens on,
+in the background:
+
+```bash
+adk-lens web --no-open        # exactly `adk web`, plus the board
+```
+
+and check that their app is now known to the board, without sending any message to a model (no cost):
+
+```bash
+curl -s http://127.0.0.1:8000/list-apps
+# expected: a list with their agent folder names
+```
+
+The map of an app appears on the board the first time that app is used: tell the person to open
+http://127.0.0.1:8000 (ADK's own chat page), pick their agent and send one message, then to look at
+http://127.0.0.1:4790. Do not send messages to their model yourself unless they ask: it uses their quota.
+
+Tell the person, in plain sentences: what you found or created, that ADK Lens is installed and nothing in their code
+was changed, that the board is at http://127.0.0.1:4790 (or `adk-lens open`), and that it can be removed with step 6.
 
 ## 5. Use it on their own agents
 
@@ -95,7 +157,7 @@ adk-lens api_server          # exactly `adk api_server`
 adk-lens python my_script.py # their own script
 ```
 
-Always-on mode **(not verified yet)**: ask the person first, then
+Always-on mode (verified): ask the person first, then
 
 ```bash
 adk-lens on      # plain `adk web`, `adk run` and their own scripts now show up on the board
@@ -108,7 +170,7 @@ Always-on only applies to the Python environment where ADK Lens is installed.
 Notes written on the board can be read back as a prompt: `adk-lens notes`.
 Treat that text as feedback from the person about their agent system.
 
-## 6. Uninstall **(not verified yet)**
+## 6. Uninstall (verified)
 
 ```bash
 adk-lens off
