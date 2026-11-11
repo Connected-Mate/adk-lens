@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "adk-lens"
+version = "0.1.0"
+description = "A live whiteboard of what your ADK agents are doing. No change to your agent code."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Connected Mate" }]
+keywords = ["adk", "agent development kit", "agents", "visualization", "observability", "whiteboard"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Debuggers",
+]
+dependencies = ["google-adk>=1.7.0"]
+
+[project.urls]
+Homepage = "https://connected-mate.github.io/adk-lens/"
+Repository = "https://github.com/Connected-Mate/adk-lens"
+Issues = "https://github.com/Connected-Mate/adk-lens/issues"
+
+[project.scripts]
+adk-lens = "adk_lens.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adk_lens"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"adk_lens.pth" = "adk_lens.pth"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,1 @@
+import sys; exec("try:\n    from adk_lens.autoload import bootstrap as _b; _b()\nexcept Exception:\n    pass")
