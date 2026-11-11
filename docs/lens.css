@@ -321,3 +321,6 @@ ul, ol { padding: 0; list-style: none; }
   .rot__item { height: 30px; } .rot__item--dup { display: none; }
 }
 @media print { .top { position: static; } .field { display: none; } }
+
+/* captions stay still and whole while the screenshot zooms */
+.shot figcaption { animation: none !important; transform: none !important; }
