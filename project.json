@@ -1,0 +1,79 @@
+{
+  "slug": "adk-lens",
+  "name": "ADK Lens",
+  "default_lang": "en",
+  "level": 2,
+  "theme": { "accent": "#2f6bff", "accent_ink": "#ffffff", "bg": "#ffffff", "ink": "#1b1c1f", "bg_dark": "#101216", "ink_dark": "#eceef2" },
+  "tagline": { "fr": "Le tableau blanc en direct de tes agents ADK", "en": "A live whiteboard for your ADK agents" },
+  "headline": { "fr": "Vois ce que font tes agents ADK.", "en": "See what your ADK agents are doing." },
+  "lede": {
+    "fr": "Un tableau blanc en direct, posé sur l'Agent Development Kit de Google. Tu ne touches pas à ton code.",
+    "en": "A live whiteboard on top of Google's Agent Development Kit. Your agent code stays untouched."
+  },
+  "description": {
+    "fr": "ADK Lens affiche en direct la carte de tes agents ADK, rejoue chaque exécution et transforme tes notes en prompt. Open source, en local.",
+    "en": "ADK Lens shows a live map of your ADK agents, replays every run and turns your board notes into a prompt. Open source, runs locally."
+  },
+  "badge": { "fr": "Open source · gratuit · en local", "en": "Open source · free · runs locally" },
+  "platform": { "fr": "Python 3.10 ou plus récent. Projet indépendant, non affilié à Google.", "en": "Python 3.10 or later. Independent project, not affiliated with Google." },
+  "app_category": "DeveloperApplication",
+  "source": "open",
+  "license": "MIT",
+  "source_repo": "https://github.com/Connected-Mate/adk-lens",
+  "price": { "model": "free" },
+  "coffee": { "enabled": true, "url": "https://revolut.me/alexcormeraie" },
+  "download": { "type": "command", "url": "https://github.com/Connected-Mate/adk-lens", "repo": "Connected-Mate/adk-lens" },
+  "install_command": "pip install \"git+https://github.com/Connected-Mate/adk-lens\"",
+  "hero_image": { "src": "assets/hero.png", "width": 1600, "height": 1000,
+    "alt": { "fr": "Illustration : un tableau blanc avec des agents reliés, un point qui suit le trajet du prompt et un post-it.", "en": "Illustration: a whiteboard with connected agents, a dot following the prompt's path and a sticky note." } },
+  "og_image": { "fr": "assets/og-fr.jpg", "en": "assets/og.jpg",
+    "alt": { "fr": "ADK Lens : le tableau blanc en direct de tes agents ADK", "en": "ADK Lens: a live whiteboard for your ADK agents" } },
+  "icon": "assets/icon-512.png",
+  "features": [
+    { "title": { "fr": "Ça se branche, ça ne casse rien", "en": "Plugs in, breaks nothing" },
+      "text": { "fr": "Lance adk-lens web à la place de adk web. Ton code d'agent ne change pas.", "en": "Run adk-lens web instead of adk web. Your agent code does not change." } },
+    { "title": { "fr": "Regarde, puis rejoue", "en": "Watch, then replay" },
+      "text": { "fr": "Deux vues de chaque exécution : le trajet du prompt sur la carte, ou l'histoire en mots simples.", "en": "Two views of every run: the prompt's journey on the map, or the story in plain words." } },
+    { "title": { "fr": "Entoure, commente, questionne", "en": "Circle, comment, ask" },
+      "text": { "fr": "Annote le tableau, puis copie le tout en un clic comme prompt pour ton agent de code.", "en": "Annotate the board, then copy it all in one click as a prompt for your coding agent." } },
+    { "title": { "fr": "Compare les versions", "en": "Compare versions" },
+      "text": { "fr": "Chaque changement de ton système d'agents est gardé. Mets deux versions côte à côte.", "en": "Every change to your agent system is kept. Put two versions side by side." } }
+  ],
+  "video_pending": true,
+  "agent_setup": {
+    "agents": ["claude-code", "codex", "cursor", "gemini-cli", "copilot", "windsurf"],
+    "prompt": {
+      "fr": "Installe ADK Lens (un tableau blanc en direct pour les agents Google ADK) sur ma machine. Suis à la lettre les instructions de https://github.com/Connected-Mate/adk-lens/blob/main/AGENT-SETUP.md : vérifie les prérequis, installe, lance la démo, puis prouve que ça marche. Ne me pose que les questions indispensables et demande-moi avant toute action sensible (mot de passe, droits administrateur, suppression).",
+      "en": "Install ADK Lens (a live whiteboard for Google ADK agents) on my machine. Follow the instructions at https://github.com/Connected-Mate/adk-lens/blob/main/AGENT-SETUP.md exactly: check the prerequisites, install, run the demo, then prove it works. Only ask me what is strictly necessary and ask before any sensitive action (password, admin rights, deletion)."
+    }
+  },
+  "sea": {
+    "keywords": {
+      "fr": ["visualiser agents adk", "google adk debug", "agent development kit visualisation", "adk web alternative", "tracer agents ia", "observabilité agents adk"],
+      "en": ["google adk visualizer", "adk agent debugging", "agent development kit tracing", "adk web alternative", "visualize ai agents", "adk agent observability"]
+    },
+    "negative_keywords": { "fr": ["android adk", "emploi", "formation"], "en": ["android adk", "jobs", "course"] },
+    "headlines": {
+      "fr": ["Vois tes agents ADK en direct", "Un tableau blanc pour ADK", "Rejoue chaque exécution", "Open source et gratuit"],
+      "en": ["See your ADK agents live", "A whiteboard for ADK agents", "Replay every agent run", "Open source and free"]
+    },
+    "descriptions": {
+      "fr": ["La carte de tes agents ADK, en direct, sans toucher à ton code. Open source.", "Annote le tableau et copie tes notes comme prompt pour ton agent de code."],
+      "en": ["A live map of your ADK agents, without touching your code. Open source, MIT.", "Annotate the board and copy your notes as a prompt for your coding agent."]
+    }
+  },
+  "legal_url": null,
+  "privacy_url": null,
+  "faq": [
+    { "q": { "fr": "Est-ce que ça modifie mon code d'agent ?", "en": "Does it change my agent code?" },
+      "a": { "fr": "Non. ADK Lens se pose par-dessus ADK. Tu l'enlèves avec adk-lens off, puis pip uninstall adk-lens.", "en": "No. ADK Lens sits on top of ADK. Remove it with adk-lens off, then pip uninstall adk-lens." } },
+    { "q": { "fr": "Faut-il une clé d'API pour essayer ?", "en": "Do I need an API key to try it?" },
+      "a": { "fr": "Non. adk-lens demo tourne avec un faux modèle, sans clé.", "en": "No. adk-lens demo runs with a fake model, no key needed." } },
+    { "q": { "fr": "Où vont mes données ?", "en": "Where does my data go?" },
+      "a": { "fr": "Nulle part : le tableau tourne sur ta machine, à l'adresse 127.0.0.1:4790. Ce site n'a ni cookie ni traceur.", "en": "Nowhere: the board runs on your machine, at 127.0.0.1:4790. This site has no cookies and no trackers." } },
+    { "q": { "fr": "C'est un produit Google ?", "en": "Is this a Google product?" },
+      "a": { "fr": "Non. C'est un projet indépendant, sous licence MIT. « ADK » désigne simplement l'outil avec lequel il fonctionne.", "en": "No. It is an independent project under the MIT licence. “ADK” only names the tool it works with." } }
+  ],
+  "footer_note": { "fr": "Fait à Paris. Non affilié à Google.", "en": "Made in Paris. Not affiliated with Google." },
+  "links": { "x": "https://x.com/AlexCormeraie", "email": null }
+}

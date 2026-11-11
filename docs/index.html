@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ADK Lens — A live whiteboard for your ADK agents</title>
+<meta name="description" content="ADK Lens shows a live map of your ADK agents, replays every run and turns your board notes into a prompt. Open source, runs locally.">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://connected-mate.github.io/adk-lens/">
+<link rel="alternate" hreflang="fr" href="https://connected-mate.github.io/adk-lens/fr/">
+<link rel="alternate" hreflang="en" href="https://connected-mate.github.io/adk-lens/">
+<link rel="alternate" hreflang="x-default" href="https://connected-mate.github.io/adk-lens/">
+<link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="assets/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ADK Lens">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:url" content="https://connected-mate.github.io/adk-lens/">
+<meta property="og:title" content="ADK Lens — A live whiteboard for your ADK agents">
+<meta property="og:description" content="ADK Lens shows a live map of your ADK agents, replays every run and turns your board notes into a prompt. Open source, runs locally.">
+<meta property="og:image" content="https://connected-mate.github.io/adk-lens/assets/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="ADK Lens: a live whiteboard for your ADK agents">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ADK Lens — A live whiteboard for your ADK agents">
+<meta name="twitter:description" content="ADK Lens shows a live map of your ADK agents, replays every run and turns your board notes into a prompt. Open source, runs locally.">
+<meta name="twitter:image" content="https://connected-mate.github.io/adk-lens/assets/og.jpg">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="lens.css">
+<style>@media (prefers-color-scheme: light){:root{--accent:#2f6bff;--accent-ink:#ffffff;--bg:#ffffff;--ink:#1b1c1f}}@media (prefers-color-scheme: dark){:root{--bg:#101216;--ink:#eceef2}}</style>
+<script>
+document.documentElement.classList.replace('no-js', 'js');
+try {
+  var pick = localStorage.getItem('adk-lens-lang');
+  if (!pick && !/^en/i.test(navigator.language || '')) { pick = 'fr'; localStorage.setItem('adk-lens-lang', pick); }
+  if (pick === 'fr') location.replace('fr/' + location.search + location.hash);
+} catch (e) {}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "ADK Lens",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Python 3.10 or later. Independent project, not affiliated with Google.",
+  "description": "ADK Lens shows a live map of your ADK agents, replays every run and turns your board notes into a prompt. Open source, runs locally.",
+  "url": "https://connected-mate.github.io/adk-lens/",
+  "image": "https://connected-mate.github.io/adk-lens/assets/og.jpg",
+  "inLanguage": [
+    "fr",
+    "en"
+  ],
+  "isAccessibleForFree": true,
+  "publisher": {
+    "@type": "Organization",
+    "name": "Connected Mate",
+    "url": "https://connectedmate.com"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Alexandre Cormeraie",
+    "url": "https://cormeraie.fr"
+  },
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "EUR"
+  },
+  "license": "https://spdx.org/licenses/MIT.html",
+  "codeRepository": "https://github.com/Connected-Mate/adk-lens"
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="wrap top">
+  <a class="mark" href="./" aria-label="ADK Lens, home"><img src="assets/icon-192.png" alt="" width="30" height="30"><span>ADK Lens</span></a>
+  <nav class="langs" aria-label="Language">
+    <span aria-current="true">EN</span>
+    <a href="fr/" data-lang="fr" data-lang-key="adk-lens-lang" hreflang="fr" lang="fr" aria-label="Version française">FR</a>
+  </nav>
+</header>
+<main id="content">
+<section class="wrap hero" aria-labelledby="title">
+  <p class="badge">Open source · free · runs locally</p>
+  <h1 class="display" id="title">See what your ADK agents are doing.</h1>
+  <p class="lede">A live whiteboard on top of Google&#x27;s Agent Development Kit. Your agent code stays untouched.</p>
+  <div class="cta"><button class="btn btn--go btn--lg" type="button" data-copy="Install ADK Lens (a live whiteboard for Google ADK agents) on my machine. Follow the instructions at https://github.com/Connected-Mate/adk-lens/blob/main/AGENT-SETUP.md exactly: check the prerequisites, install, run the demo, then prove it works. Only ask me what is strictly necessary and ask before any sensitive action (password, admin rights, deletion)." data-copied="Prompt copied — paste it into your agent">Copy the setup prompt</button><div class="rot"><div class="rot__list" aria-hidden="true"><span class="rot__item"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>Claude Code</span><span class="rot__item"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>Codex</span><span class="rot__item"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></svg>Antigravity · Gemini CLI</span><span class="rot__item"><span class="rot__mono">C</span>Cursor</span><span class="rot__item"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/></svg>GitHub Copilot</span><span class="rot__item"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M23.55 5.067c-1.2038-.002-2.1806.973-2.1806 2.1765v4.8676c0 .972-.8035 1.7594-1.7597 1.7594-.568 0-1.1352-.286-1.4718-.7659l-4.9713-7.1003c-.4125-.5896-1.0837-.941-1.8103-.941-1.1334 0-2.1533.9635-2.1533 2.153v4.8957c0 .972-.7969 1.7594-1.7596 1.7594-.57 0-1.1363-.286-1.4728-.7658L.4076 5.1598C.2822 4.9798 0 5.0688 0 5.2882v4.2452c0 .2147.0656.4228.1884.599l5.4748 7.8183c.3234.462.8006.8052 1.3509.9298 1.3771.313 2.6446-.747 2.6446-2.0977v-4.893c0-.972.7875-1.7593 1.7596-1.7593h.003a1.798 1.798 0 0 1 1.4718.7658l4.9723 7.0994c.4135.5905 1.05.941 1.8093.941 1.1587 0 2.1515-.9645 2.1515-2.153v-4.8948c0-.972.7875-1.7594 1.7596-1.7594h.194a.22.22 0 0 0 .2204-.2202v-4.622a.22.22 0 0 0-.2203-.2203Z"/></svg>Windsurf</span><span class="rot__item"><span class="rot__mono">+</span>any agent</span><span class="rot__item rot__item--dup"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg>Claude Code</span></div><span class="sr-only">Works with Claude Code, Codex, Antigravity and Gemini CLI, Cursor, GitHub Copilot, Windsurf, or any coding agent.</span></div></div>
+  <p class="fine">Python 3.10 or later. Independent project, not affiliated with Google.</p>
+  <p class="fine" data-download-note hidden></p>
+  <figure class="board"><div class="board__frame"><svg viewBox="0 0 840 540" role="img" aria-label="Illustration: a whiteboard where a prompt travels from one agent to the next, with a sticky note, a circled agent and a version stamp.">
+  <path class="b-line" d="M250 264 L340 264"/>
+  <path class="b-line" d="M510 250 C560 250 550 125 600 125"/>
+  <path class="b-line" d="M510 280 C560 280 550 405 600 405"/>
+  <path class="b-line" d="M700 160 C700 180 720 192 720 212" stroke-dasharray="2 7"/>
+  <circle class="b-dot b-dot--a" r="8"/>
+  <circle class="b-dot b-dot--b" r="8"/>
+  <text class="b-sub" x="44" y="222">YOUR PROMPT</text>
+  <g class="b-node b-prompt"><rect x="40" y="232" width="214" height="64" rx="32"/><text x="147" y="270" text-anchor="middle">Plan my weekend</text></g>
+  <text class="b-sub" x="344" y="216">AGENT</text>
+  <g class="b-node b-blue"><rect x="340" y="226" width="170" height="76" rx="22"/><rect class="b-ring b-ring--1" x="334" y="220" width="182" height="88" rx="27"/><text x="425" y="271" text-anchor="middle">concierge</text></g>
+  <g class="b-node b-green"><rect x="600" y="90" width="200" height="70" rx="22"/><rect class="b-ring b-ring--2" x="594" y="84" width="212" height="82" rx="27"/><text x="700" y="132" text-anchor="middle">weather_agent</text></g>
+  <g class="b-node b-tool"><rect x="640" y="212" width="160" height="46" rx="23"/><text x="720" y="240" text-anchor="middle">get_weather</text></g>
+  <text class="b-sub" x="630" y="240" text-anchor="end">TOOL</text>
+  <g class="b-node b-coral"><rect x="600" y="370" width="170" height="70" rx="22"/><rect class="b-ring b-ring--3" x="594" y="364" width="182" height="82" rx="27"/><text x="685" y="412" text-anchor="middle">planner</text></g>
+  <path class="b-circle" d="M588 352 C640 330 760 336 790 384 C812 430 752 468 678 462 C610 458 566 430 572 392 C576 368 600 352 628 346"/>
+  <g class="b-q"><circle cx="800" cy="350" r="19"/><text x="800" y="357" text-anchor="middle">?</text></g>
+  <g class="b-sticky"><rect x="60" y="380" width="190" height="118" rx="6"/><text x="78" y="428">Why the weather</text><text x="78" y="456">first?</text></g>
+  <g class="b-stamp"><rect x="350" y="418" width="124" height="52" rx="12"/><text x="412" y="451" text-anchor="middle">V2 OK</text></g>
+</svg></div><figcaption>Illustration of the idea. The real board draws your own agents.</figcaption></figure>
+</section>
+<section class="wrap section" id="features" data-reveal aria-labelledby="features-title">
+  <h2 class="h2" id="features-title">What it does</h2>
+  <ul class="features" role="list">
+    <li class="feature"><svg viewBox="0 0 120 64" aria-hidden="true"><rect class="m-paper" x="2" y="14" width="58" height="36" rx="10"/><text class="m-txt" x="31" y="36" text-anchor="middle">ADK</text><g class="m-plug"><rect class="m-blue" x="62" y="14" width="40" height="36" rx="10"/><circle cx="82" cy="32" r="8" fill="none" stroke="#fff" stroke-width="2.5"/></g></svg><h3>Plugs in, breaks nothing</h3><p>Run adk-lens web instead of adk web. Your agent code does not change.</p></li>
+    <li class="feature"><svg viewBox="0 0 120 64" aria-hidden="true"><path class="m-stroke" d="M12 32 H108"/><circle class="m-soft" cx="12" cy="32" r="9"/><circle class="m-soft" cx="60" cy="32" r="9"/><circle class="m-soft" cx="108" cy="32" r="9"/><circle class="m-blue m-run" cx="12" cy="32" r="6"/></svg><h3>Watch, then replay</h3><p>Two views of every run: the prompt&#x27;s journey on the map, or the story in plain words.</p></li>
+    <li class="feature"><svg viewBox="0 0 120 64" aria-hidden="true"><rect class="m-soft" x="14" y="20" width="44" height="24" rx="9"/><path class="m-draw" d="M8 22 C22 6 60 8 66 30 C70 50 30 58 12 46 C2 38 6 26 16 20"/><rect class="m-yellow" x="80" y="12" width="34" height="34" rx="3" transform="rotate(5 97 29)"/></svg><h3>Circle, comment, ask</h3><p>Annotate the board, then copy it all in one click as a prompt for your coding agent.</p></li>
+    <li class="feature"><svg viewBox="0 0 120 64" aria-hidden="true"><rect class="m-paper" x="2" y="8" width="52" height="48" rx="10"/><rect class="m-paper" x="66" y="8" width="52" height="48" rx="10"/><text class="m-txt" x="10" y="23">V1</text><text class="m-txt" x="74" y="23">V2</text><circle class="m-blue" cx="20" cy="40" r="6"/><circle class="m-blue" cx="38" cy="40" r="6"/><circle class="m-blue" cx="80" cy="40" r="6"/><circle class="m-blue" cx="94" cy="40" r="6"/><circle class="m-green m-blink" cx="108" cy="40" r="6"/></svg><h3>Compare versions</h3><p>Every change to your agent system is kept. Put two versions side by side.</p></li>
+  </ul>
+</section>
+<section class="wrap section" id="shots" data-shots hidden aria-labelledby="shots-title">
+  <h2 class="h2" id="shots-title">The real thing</h2>
+  <div class="shots">
+    <figure class="shot" data-shot="assets/shot-map.png" data-alt="ADK Lens screenshot: the map of agents and tools." hidden><figcaption>The map of your agents and tools.</figcaption></figure>
+    <figure class="shot" data-shot="assets/shot-linear.png" data-alt="ADK Lens screenshot: the Linear view of a run." hidden><figcaption>A run, told in plain words.</figcaption></figure>
+    <figure class="shot" data-shot="assets/shot-notes.png" data-alt="ADK Lens screenshot: notes on the board." hidden><figcaption>Your notes, ready to copy as a prompt.</figcaption></figure>
+  </div>
+</section>
+<section class="wrap section agent-setup" id="agent" aria-labelledby="agent-title" data-reveal>
+  <h2 class="h2" id="agent-title">Set it up with your coding agent</h2>
+  <p class="section__lede">Use whichever agent you like. Copy this prompt, paste it into your agent: it installs, configures and checks everything for you. Nothing to set up by hand.</p>
+  <ul class="agents" role="list"><li class="agent"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg><span>Claude Code</span></li><li class="agent"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg><span>Codex</span></li><li class="agent"><span class="agent__mono" aria-hidden="true">C</span><span>Cursor</span></li><li class="agent"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81"/></svg><span>Gemini CLI</span></li><li class="agent"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z"/></svg><span>GitHub Copilot</span></li><li class="agent"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true" focusable="false"><path d="M23.55 5.067c-1.2038-.002-2.1806.973-2.1806 2.1765v4.8676c0 .972-.8035 1.7594-1.7597 1.7594-.568 0-1.1352-.286-1.4718-.7659l-4.9713-7.1003c-.4125-.5896-1.0837-.941-1.8103-.941-1.1334 0-2.1533.9635-2.1533 2.153v4.8957c0 .972-.7969 1.7594-1.7596 1.7594-.57 0-1.1363-.286-1.4728-.7658L.4076 5.1598C.2822 4.9798 0 5.0688 0 5.2882v4.2452c0 .2147.0656.4228.1884.599l5.4748 7.8183c.3234.462.8006.8052 1.3509.9298 1.3771.313 2.6446-.747 2.6446-2.0977v-4.893c0-.972.7875-1.7593 1.7596-1.7593h.003a1.798 1.798 0 0 1 1.4718.7658l4.9723 7.0994c.4135.5905 1.05.941 1.8093.941 1.1587 0 2.1515-.9645 2.1515-2.153v-4.8948c0-.972.7875-1.7594 1.7596-1.7594h.194a.22.22 0 0 0 .2204-.2202v-4.622a.22.22 0 0 0-.2203-.2203Z"/></svg><span>Windsurf</span></li><li class="agent agent--any"><span>or any agent</span></li></ul>
+  <div class="prompt">
+    <p class="prompt__label" id="prompt-label">Setup prompt</p>
+    <pre class="prompt__box" aria-labelledby="prompt-label" tabindex="0"><code>Install ADK Lens (a live whiteboard for Google ADK agents) on my machine. Follow the instructions at https://github.com/Connected-Mate/adk-lens/blob/main/AGENT-SETUP.md exactly: check the prerequisites, install, run the demo, then prove it works. Only ask me what is strictly necessary and ask before any sensitive action (password, admin rights, deletion).</code></pre>
+    <button class="btn btn--go btn--lg" type="button" data-copy="Install ADK Lens (a live whiteboard for Google ADK agents) on my machine. Follow the instructions at https://github.com/Connected-Mate/adk-lens/blob/main/AGENT-SETUP.md exactly: check the prerequisites, install, run the demo, then prove it works. Only ask me what is strictly necessary and ask before any sensitive action (password, admin rights, deletion)." data-copied="Prompt copied — paste it into your agent">Copy the prompt</button>
+  </div>
+  <ol class="agent-steps"><li>Copy the prompt</li><li>Paste it into your coding agent</li><li>It installs and checks everything</li></ol>
+</section>
+<div class="wrap duo">
+<section class="wrap section panel" id="source" aria-labelledby="source-title">
+  <h2 class="h2" id="source-title">Open source</h2>
+  <p>ADK Lens's code is public, under the MIT licence. Read it, reuse it, suggest improvements.</p>
+  <a class="btn btn--ghost btn--lg" href="https://github.com/Connected-Mate/adk-lens" rel="noopener">See the code on GitHub</a>
+</section>
+<section class="wrap section coffee" data-reveal id="coffee" aria-labelledby="coffee-title">
+  <div class="coffee__panel">
+    <svg class="coffee__icon" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 3c0 1.5 1 1.5 1 3M12 3c0 1.5 1 1.5 1 3"/></svg>
+    <div>
+      <h2 class="h2" id="coffee-title">Buy me a coffee</h2>
+      <p>ADK Lens is free and will stay free: no subscription, no “pro” version. If it helps you, a coffee makes my day and keeps me building.</p>
+      <a class="btn btn--paper btn--lg" href="https://revolut.me/alexcormeraie" rel="noopener" data-coffee>Buy a coffee</a>
+    </div>
+  </div>
+</section>
+</div>
+<section class="wrap section" id="faq" data-reveal aria-labelledby="faq-title">
+  <h2 class="h2" id="faq-title">Frequently asked questions</h2>
+    <details class="qa"><summary>Does it change my agent code?</summary><p>No. ADK Lens sits on top of ADK. Remove it with adk-lens off, then pip uninstall adk-lens.</p></details>
+    <details class="qa"><summary>Do I need an API key to try it?</summary><p>No. adk-lens demo runs with a fake model, no key needed.</p></details>
+    <details class="qa"><summary>Where does my data go?</summary><p>Nowhere: the board runs on your machine, at 127.0.0.1:4790. This site has no cookies and no trackers.</p></details>
+    <details class="qa"><summary>Is this a Google product?</summary><p>No. It is an independent project under the MIT licence. “ADK” only names the tool it works with.</p></details>
+</section>
+</main>
+<footer class="wrap foot">
+  <a class="mark" href="./"><img src="assets/icon-192.png" alt="" width="30" height="30" loading="lazy"><span>ADK Lens</span></a>
+  <nav aria-label="Useful links"><a href="https://github.com/Connected-Mate/adk-lens/issues">Report a problem</a><a href="https://github.com/Connected-Mate/adk-lens" rel="noopener">Source code</a><a href="https://revolut.me/alexcormeraie" rel="noopener">Buy a coffee</a><a href="https://x.com/AlexCormeraie" rel="noopener">@AlexCormeraie on X</a><a href="https://connectedmate.com/en/legal/">Legal notice</a><a href="fr/" data-lang="fr" data-lang-key="adk-lens-lang" hreflang="fr" lang="fr">Version française</a></nav>
+  <p>© 2026 Connected Mate. Made in Paris. Not affiliated with Google.</p>
+</footer>
+<nav class="capsule" aria-label="Quick navigation">
+  <a href="#features">Features</a>
+  <a href="#faq">Questions</a>
+  <a class="btn btn--go" href="#agent">Set up</a>
+</nav>
+<script src="site.js" defer></script>
+<script src="lens.js" defer></script>
+</body>
+</html>
