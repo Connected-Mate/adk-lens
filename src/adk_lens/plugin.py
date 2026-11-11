@@ -144,6 +144,8 @@ class LensPlugin(BasePlugin):
         node_info = getattr(event, "node_info", None)
         if getattr(node_info, "path", None):
             out["path"] = node_info.path
+        if getattr(event, "output", None) is not None:
+            out["output"] = safe(event.output)
         if actions is not None:
             delta = getattr(actions, "state_delta", None)
             if delta:

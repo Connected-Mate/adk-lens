@@ -32,7 +32,7 @@ Events that belong to a run also have `run` (one user request = one run id) and 
 | `tool_start` | `agent`, `tool`, `call_id`, `args`, `agent_tool` (bool: the tool is another agent) | The agent uses a tool. |
 | `tool_end` | `agent`, `tool`, `call_id`, `result`, `duration_ms` | The tool answered. |
 | `tool_error` | `agent`, `tool`, `call_id`, `error`, `error_type` | The tool failed. |
-| `event` | `author`, `parts`, `text`, `final` (bool), `partial` (bool), `state_delta` (object), `transfer_to` (agent name), `escalate` (bool), `artifacts` ([names]), `branch`, `path` | Anything ADK itself records: a message, a hand-off, a memory change. `final: true` and `author` not `user` = an answer shown to the user. |
+| `event` | `author`, `parts`, `text`, `final` (bool), `partial` (bool), `state_delta` (object), `transfer_to` (agent name), `escalate` (bool), `artifacts` ([names]), `branch`, `path`, `output` | Anything ADK itself records: a message, a hand-off, a memory change. `final: true` and `author` not `user` = an answer shown to the user. |
 | `agent_error` | `agent`, `error`, `error_type` | An agent crashed. |
 | `run_end` | `duration_ms` | The request is finished. |
 | `run_error` | `error`, `error_type` | The request failed. |
@@ -72,3 +72,14 @@ Edge `kind`: `delegate` (can hand over to), `then` (with `order`), `together`, `
 Runtime names map to nodes like this: an agent event's `agent` equals a node `name` (agent names are unique in an app);
 a tool event maps to node id `<agent id>::<tool name>`. The UI must create a node on the fly when an event names
 an agent or tool that is not in the topology (toolsets, dynamic tools).
+
+### Workflows (ADK 2 graphs)
+
+Workflow steps that are plain functions do not produce `agent_start` / `agent_end`. Their activity is visible through
+`event` items: `path` looks like `my_workflow@1/clean@1` (node names with a run counter after `@`), and `output` holds
+what the step returned. The last segment of `path`, without `@n`, is the name of the node that just worked.
+
+### Agents used as tools
+
+When an agent is used as a tool, its steps are reported inside the parent run (same `run` id), between the parent's
+`tool_start` (with `agent_tool: true`) and `tool_end`. Its `agent_start` has `nested: true`.
