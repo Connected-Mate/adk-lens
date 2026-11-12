@@ -8,12 +8,13 @@ Agent processes push events to it; the browser UI (files in `src/adk_lens/static
 | Method, path | Purpose |
 |---|---|
 | `GET /api/ping` | `{"adk_lens": "<version>", "pid": 123}` |
-| `GET /api/state` | Snapshot: `{"seq": 412, "events": [...all events kept, oldest first], "apps": {"<app>": <topology>}, "versions": {"<app>": [{"v": 1, "ts": 1731000000.0, "hash": "ab12", "topology": {...}}]}, "notes": <whatever the UI last saved, or null>}` |
+| `GET /api/state` | Snapshot: `{"seq": 412, "events": [...all events kept, oldest first], "apps": {"<app>": <topology of the current version>}, "versions": {"<app>": [<version>, ...]}, "current": {"<app>": <v of the current version>}, "notes": <whatever the UI last saved, or null>}`. See [Versions](#versions). |
 | `GET /api/stream?since=<seq>` | Server-sent events. Each message: `data: <one event JSON>`. Sends every event with `seq > since`, then live ones. Comment lines `: ping` every 15 s. |
 | `PUT /api/notes` | Body = any JSON document (the UI's annotations). Saved to `~/.adk-lens/notes.json`. Requires header `X-ADK-Lens: 1`. |
 | `GET /api/notes` | The saved document, or `null`. |
 | `POST /api/clear` | Forget all runs (keeps topologies, versions, notes). Requires header `X-ADK-Lens: 1`. |
 | `POST /api/ingest` | Used by agent processes: `{"events": [...]}`. Requires header `X-ADK-Lens`. |
+| `POST /api/shutdown` | Stops the hub (used by `adk-lens stop`). Requires header `X-ADK-Lens: 1`. |
 
 ## Events
 
@@ -22,7 +23,7 @@ Events that belong to a run also have `run` (one user request = one run id) and 
 
 | `type` | Extra fields | Meaning in plain words |
 |---|---|---|
-| `topology` | `root`, `nodes`, `edges`, `source` | The shape of the app. Sent when an app starts and again whenever it changes. |
+| `topology` | `root`, `nodes`, `edges`, `source`, `version` (int, set by the hub: the version that is now current), `reverted` (`true` only when the app went back to a version that already existed) | The shape of the app. Sent when an app starts and again whenever it changes. |
 | `run_start` | `user_message` (text), `parts`, `user`, `root_agent` | Someone sent a message. |
 | `agent_start` | `agent` (name), `path`, `nested` (bool) | An agent takes the floor. |
 | `agent_end` | `agent`, `duration_ms` | The agent is done. |
@@ -32,16 +33,40 @@ Events that belong to a run also have `run` (one user request = one run id) and 
 | `tool_start` | `agent`, `tool`, `call_id`, `args`, `agent_tool` (bool: the tool is another agent) | The agent uses a tool. |
 | `tool_end` | `agent`, `tool`, `call_id`, `result`, `duration_ms` | The tool answered. |
 | `tool_error` | `agent`, `tool`, `call_id`, `error`, `error_type` | The tool failed. |
-| `event` | `author`, `parts`, `text`, `final` (bool), `partial` (bool), `state_delta` (object), `transfer_to` (agent name), `escalate` (bool), `artifacts` ([names]), `branch`, `path`, `output` | Anything ADK itself records: a message, a hand-off, a memory change. `final: true` and `author` not `user` = an answer shown to the user. |
+| `event` | `author`, `parts`, `text`, `final` (bool), `partial` (bool), `state_delta` (object), `transfer_to` (agent name), `escalate` (bool), `artifacts` ([names]), `branch`, `path`, `output` | Anything ADK itself records: a message, a hand-off, a memory change. `final: true` and `author` not `user` = an answer shown to the user. `final` is only ever `true` on an event that carries something (`parts` not empty before any privacy stripping): the empty event ADK records when a request fails has `final: false` and an `error` field. |
 | `agent_error` | `agent`, `error`, `error_type` | An agent crashed. |
-| `run_end` | `duration_ms` | The request is finished. |
-| `run_error` | `error`, `error_type` | The request failed. |
+| `run_end` | `duration_ms`; sometimes `interrupted: true` with `reason` | The request is finished. With `interrupted: true` it did not finish by itself: `reason: "cancelled"` = the program that asked stopped listening before the end (sent by the agent process); `reason: "process_gone"` = the agent process disappeared in the middle (killed, crashed), sent by the hub itself a few seconds later, without `duration_ms`. |
+| `run_error` | `error`, `error_type`, `duration_ms` | The request failed. |
+
+### How a run ends
+
+Every `run_start` is followed, sooner or later, by exactly one `run_end` or `run_error` with the same `run`, and that
+event is the last one of the run:
+
+- normal end: `run_end`;
+- the request raised an error: `run_error` (on every supported ADK version, 1.7.0 and later; on ADK 1.7 and 1.8 there
+  is no `tool_error` before it, the failing tool only has its `tool_start`);
+- the caller stopped reading: `run_end` (recent ADK versions) or `run_end` with `interrupted: true, reason: "cancelled"`;
+- the agent process died: `run_end` with `interrupted: true, reason: "process_gone"`, added by the hub once the `pid`
+  of the run's `run_start` no longer exists (checked every 3 s, confirmed on two checks in a row, so 3 to 6 s later).
+
+A UI can therefore treat a run as "live" exactly until its `run_end` / `run_error`. Steps left open inside an ended run
+(a `tool_start` or `model_start` without its end) are to be shown as stopped, not as running.
 
 `parts` is a list of `{"kind": "text"|"thought", "text"}`, `{"kind": "call", "name", "id", "args"}`,
 `{"kind": "result", "name", "id", "response"}`, `{"kind": "file", "mime", "size"}`.
 
-All text is clipped (4000 chars), so values may end with `… (+N chars)`. Any field may be missing:
-with `ADK_LENS_CONTENT=0` only names, timings and counts are sent.
+All text is clipped (4000 chars), so values may end with `… (+N chars)`. Any field may be missing.
+
+### Privacy switch (`ADK_LENS_CONTENT=0`)
+
+Events sent with `ADK_LENS_CONTENT=0` carry `"content": false` and only these fields: `type`, `app`, `run`, `session`,
+`agent`, `tool`, `model`, `call_id`, `ts`, `pid`, `duration_ms`, `tokens_in`, `tokens_out`, `messages`, `finish`,
+`final`, `partial`, `transfer_to`, `escalate`, `author`, `root`, `root_agent`, `error_type`, `nested`, `agent_tool`,
+`path`, `branch`, `event_id`, `state_keys`, `source`, `interrupted`, `reason`, plus `calls` reduced to `[{name}]` and
+`tools` (names). No `text`, `parts`, `user_message`, `system`, `last`, `args`, `result`, `error`, `output`, `state_delta`.
+In a `topology`, nodes keep only `id`, `name`, `kind`, `cls`, `parent`, `model`, `output_key`, `mode`,
+`max_iterations`, `prefix` (no `description`, no `instruction`), and edges keep `from`, `to`, `kind`, `order`, `label`.
 
 ## Topology
 
@@ -68,6 +93,36 @@ Node `kind`: `llm` (an agent that thinks with a model), `sequential` (runs its c
 
 Edge `kind`: `delegate` (can hand over to), `then` (with `order`), `together`, `repeat`, `uses_tool`,
 `uses_agent` (agent used as a tool), `flow` (workflow edge, optional `label`), `wraps`.
+
+### Versions
+
+The hub keeps up to 30 versions per app (saved in `~/.adk-lens/versions.json`). One entry of `versions["<app>"]`:
+
+```json
+{"v": 3, "ts": 1731000000.0, "seen": 1731000900.0, "hash": "31a171e6b8", "shape": "9c0d2e11aa",
+ "current": true, "topology": {"app": "…", "root": "…", "nodes": [], "edges": []}}
+```
+
+- `v`: version number, never reused. The list is ordered by `v`.
+- `ts`: when this version was first seen. `seen`: when it last became the current one.
+- `hash`: fingerprint of everything on the map (structure, instructions, descriptions, models).
+  Two versions of one app never share a `hash`.
+- `shape`: fingerprint of the structure only (node `id`, `name`, `kind`, `parent`; edge `from`, `to`, `kind`, `order`).
+- `current`: `true` on exactly one version per app. **The current version is not always the last of the list**:
+  use this flag (or `state.current["<app>"]`), not the position.
+- `content: false` (optional): this version was recorded with the privacy switch, its topology has no texts.
+
+What the UI receives when an app announces its shape:
+
+| Situation | Versions list | `topology` event |
+|---|---|---|
+| Same as the current version | unchanged | none (except the first one after a hub start or a clear, with `version`) |
+| New: the structure or a text changed | a new entry, `current: true` | `version: <new v>` |
+| Back to an earlier version (same `hash`) | no new entry; that entry gets `current: true` and a fresh `seen` | `version: <that v>`, `reverted: true` |
+| Sent with `ADK_LENS_CONTENT=0` | compared on `shape` only: no new entry if the structure is known (the texts already stored are kept); a new entry with `content: false` otherwise | as above; the event itself has no texts |
+| First seen with the privacy switch, later without | the same entry is completed with its texts and a new `hash` (no new version) | `version: <same v>`, with the texts |
+
+After a `topology` event with `version`, the full list is in `GET /api/state`.
 
 Runtime names map to nodes like this: an agent event's `agent` equals a node `name` (agent names are unique in an app);
 a tool event maps to node id `<agent id>::<tool name>`. The UI must create a node on the fly when an event names

@@ -7,6 +7,9 @@
     adk-lens on | off             always-on mode for plain `adk` and your scripts
     adk-lens notes                print the board's comments as a prompt for a coding agent
     adk-lens open | status | stop | clear
+    adk-lens version | help
+
+Settings: ADK_LENS_PORT (default 4790), ADK_LENS_CONTENT=0, ADK_LENS_QUIET=1, ADK_LENS_OPEN=0.
 """
 
 from __future__ import annotations
@@ -33,12 +36,39 @@ def _maybe_open(args: list[str]) -> list[str]:
     """Open the board in the browser when a person is at the keyboard."""
     wants = "--no-open" not in args and os.environ.get("ADK_LENS_OPEN", "1") not in ("0", "false", "no")
     args = [a for a in args if a not in ("--no-open", "--open")]
-    if wants and sys.stderr.isatty() and transport.start_hub():
+    if wants and sys.stderr.isatty() and transport.start_hub(explicit=True):
         try:
             webbrowser.open(transport.url())
         except Exception:
             pass
     return args
+
+
+def _board(required: bool) -> bool:
+    """Start the board for a command a person typed (this also lifts an earlier `adk-lens stop`).
+
+    When it cannot start, say why in one line. `required=False`: the person's own
+    command still runs, just without the board.
+    """
+    if transport.start_hub(explicit=True):
+        return True
+    if transport.port_taken_by_other():
+        transport.say_port_taken(force=True)
+    else:
+        _say(f"ADK Lens: could not start the board on port {transport.port()}.")
+    if not required:
+        _say("Your command runs as usual, without the board.")
+        os.environ["ADK_LENS"] = "0"  # also for child processes
+    return False
+
+
+def _adk_commands(adk_main) -> set | None:
+    """Names of the real `adk` subcommands, or None when they cannot be read."""
+    try:
+        names = set(getattr(adk_main, "commands", None) or ())
+        return names or None
+    except Exception:
+        return None
 
 
 def _post(path: str) -> bool:
@@ -104,12 +134,14 @@ def main(argv=None) -> int:
     if cmd == "hub":
         from . import hub
 
+        transport.clear_stopped()
         return hub.main(args[1:])
 
     if cmd == "on":
         path = autoload.always_on_file()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("ADK Lens always-on. Delete this file or run `adk-lens off` to stop.\n")
+        transport.clear_stopped()
         _say("ADK Lens is now always on: `adk web`, `adk run` and your own scripts show up on the board.")
         _say(f"Board: {transport.url()}   Turn off: adk-lens off")
         return 0
@@ -123,21 +155,34 @@ def main(argv=None) -> int:
 
     if cmd == "status":
         info = transport.ping()
-        _say(f"Board:      {'running at ' + transport.url() if info else 'not running'}")
+        if info:
+            board = "running at " + transport.url()
+        elif transport.port_busy():
+            board = f"not running (port {transport.port()} is used by another program: set ADK_LENS_PORT)"
+        elif transport.stopped():
+            board = "stopped (`adk-lens open` starts it again)"
+        else:
+            board = "not running"
+        _say(f"Board:      {board}")
         _say(f"Always-on:  {'yes' if autoload.always_on_file().exists() else 'no'}")
         return 0
     if cmd == "stop":
-        _say("Board stopped." if _post("/api/shutdown") else "The board was not running.")
+        # The marker keeps agent programs that are still running from bringing the board back.
+        transport.mark_stopped()
+        was_ours = transport.ping() is not None
+        if was_ours and _post("/api/shutdown"):
+            _say("Board stopped. It stays stopped until you run `adk-lens open` (or any other adk-lens command that starts it).")
+        else:
+            _say("The board was not running. It stays off until you run `adk-lens open` (or any other adk-lens command that starts it).")
         return 0
     if cmd == "clear":
         _say("Runs cleared." if _post("/api/clear") else "The board is not running.")
         return 0
     if cmd == "open":
-        if not transport.start_hub():
-            _say("Could not start the board.")
+        if not _board(required=True):
             return 1
         _say(f"Board: {transport.url()}")
-        if "--no-open" not in args:
+        if "--no-open" not in args and os.environ.get("ADK_LENS_OPEN", "1") not in ("0", "false", "no"):
             webbrowser.open(transport.url())
         return 0
     if cmd == "notes":
@@ -161,11 +206,14 @@ def main(argv=None) -> int:
 
     if cmd == "demo":
         rest = _maybe_open(args[1:])
-        if not autoload.install():
+        try:
+            import google.adk  # noqa: F401
+        except ImportError:
             _say("google-adk is not installed here. Run: pip install google-adk")
             return 1
-        if not transport.start_hub():
-            _say("Could not start the board.")
+        if not autoload.install():
+            return 1  # ADK too old: `supported()` has said so
+        if not _board(required=True):
             return 1
         os.environ["ADK_LENS_QUIET"] = "1"
         _say(f"\n  ADK Lens demo. Open {transport.url()}\n")
@@ -193,7 +241,8 @@ def main(argv=None) -> int:
         if not rest:
             _say("Usage: adk-lens python my_script.py [args]  |  adk-lens python -m my.module [args]")
             return 2
-        autoload.bootstrap()
+        if _board(required=False):
+            autoload.bootstrap()
         if rest[0] == "-m" and len(rest) > 1:
             sys.argv = rest[1:]
             runpy.run_module(rest[1], run_name="__main__", alter_sys=True)
@@ -204,15 +253,30 @@ def main(argv=None) -> int:
         return 0
 
     # Anything else is an `adk` command, passed through untouched.
-    rest = _maybe_open(args)
-    if not autoload.install():
-        _say("google-adk is not installed here. Run: pip install google-adk")
-        return 1
     try:
         from google.adk.cli import main as adk_main
+    except ImportError:
+        _say("google-adk is not installed here. Run: pip install google-adk")
+        return 1
     except Exception as error:
         _say(f"Could not load the adk command: {error}")
         return 1
+    known = _adk_commands(adk_main)
+    if known is not None and not cmd.startswith("-") and cmd not in known:
+        _say(f"adk-lens: unknown command '{cmd}'.")
+        _say(HELP)
+        _say("adk commands that work the same way with the lens on: " + ", ".join(sorted(known)))
+        return 2
+    rest = _maybe_open(args)
+    serves_agents = cmd in ("web", "run", "api_server") and not {"--help", "-h"} & set(rest)
+    if serves_agents:
+        watching = _board(required=False)
+    else:
+        # Other adk commands (create, deploy, eval...): the board only starts if agents really run.
+        transport.clear_stopped()
+        watching = True
+    if watching:
+        autoload.install()
     sys.argv = ["adk", *rest]
     result = adk_main()
     return int(result or 0)

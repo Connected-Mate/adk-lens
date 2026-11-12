@@ -4,6 +4,11 @@
 as usual, the lens plugin is added to that runner's own plugin list. The user's
 `App`, agents and plugin list objects are left untouched.
 
+It also lets `Runner.run_async` pass through a look-only relay (`_watch_runs`): every
+event and every exception goes to the caller unchanged; the relay only notices
+that the stream is over, so a request that failed or was abandoned is reported
+as finished on every ADK version.
+
 `bootstrap()` is what the `.pth` file calls at interpreter start. It does nothing
 unless the lens is switched on, and it never imports ADK by itself: it waits
 for the program to import `google.adk.runners`.
@@ -11,12 +16,15 @@ for the program to import `google.adk.runners`.
 
 from __future__ import annotations
 
+import contextvars
 import os
 import sys
 from pathlib import Path
 
 _installed = False
 _TARGET = "google.adk.runners"
+MIN_ADK = (1, 7, 0)  # first ADK with plugins
+_current_run: contextvars.ContextVar = contextvars.ContextVar("adk_lens_run", default=None)
 
 
 def always_on_file() -> Path:
@@ -48,6 +56,86 @@ def install() -> bool:
     return _installed
 
 
+def _adk_version() -> tuple | None:
+    try:
+        from importlib.metadata import version
+
+        numbers = []
+        for piece in version("google-adk").split(".")[:3]:
+            digits = "".join(ch for ch in piece if ch.isdigit()) if piece[:1].isdigit() else ""
+            numbers.append(int(digits or 0))
+        return tuple(numbers)
+    except Exception:
+        return None
+
+
+def supported() -> bool:
+    """False on an ADK too old for the lens (says so once, on stderr)."""
+    found = _adk_version()
+    if found is None or found >= MIN_ADK:
+        return True
+    if os.environ.get("ADK_LENS_QUIET", "").lower() not in ("1", "true", "yes"):
+        try:
+            sys.stderr.write(
+                "ADK Lens is off: it needs google-adk %s or later, this environment has %s.\n"
+                % (".".join(map(str, MIN_ADK)), ".".join(map(str, found)))
+            )
+        except Exception:
+            pass
+    return False
+
+
+def _watch_runs(Runner) -> None:
+    """Let `Runner.run_async` pass through a look-only relay (see the module docstring)."""
+    original = Runner.run_async
+    if getattr(original, "_adk_lens", False):
+        return
+    import functools
+    import inspect
+
+    if not inspect.isasyncgenfunction(original):
+        return  # an ADK we do not know: leave it alone
+
+    @functools.wraps(original)
+    async def lens_run_async(self, *args, **kwargs):
+        agen = original(self, *args, **kwargs)
+        holder: dict = {}
+        error = None
+        interrupted = False
+        try:
+            _current_run.set(holder)  # read by the plugin's before_run_callback, during the first step
+        except Exception:
+            pass
+        try:
+            async for event in agen:
+                if "run" not in holder:
+                    try:
+                        holder["run"] = str(event.invocation_id or "") or None
+                    except Exception:
+                        pass
+                yield event
+        except Exception as exc:
+            error = exc
+            raise  # the caller gets the very same exception
+        except BaseException:  # the caller stopped reading (break, cancel, Ctrl+C)
+            interrupted = True
+            raise
+        finally:
+            try:
+                if interrupted:
+                    await agen.aclose()  # same clean-up the caller would have triggered directly
+            finally:
+                try:
+                    from .plugin import lens_plugin
+
+                    lens_plugin.run_finished(holder.get("run"), error, interrupted)
+                except Exception:
+                    pass
+
+    lens_run_async._adk_lens = True
+    Runner.run_async = lens_run_async
+
+
 def _patch(runners_module) -> None:
     global _installed
     if _installed:
@@ -57,6 +145,8 @@ def _patch(runners_module) -> None:
         original_init = Runner.__init__
         if getattr(original_init, "_adk_lens", False):
             _installed = True
+            return
+        if not supported():
             return
 
         def lens_init(self, *args, **kwargs):
@@ -73,6 +163,10 @@ def _patch(runners_module) -> None:
         lens_init.__qualname__ = getattr(original_init, "__qualname__", "Runner.__init__")
         Runner.__init__ = lens_init
         _installed = True
+        try:
+            _watch_runs(Runner)
+        except Exception:
+            pass
     except Exception:
         pass
 

@@ -18,9 +18,13 @@ async def play(questions=None, pause: float = 2.5) -> None:
 
     from .trip_demo.agent import root_agent
 
+    # Keep the demo's terminal to the conversation: the last question fails on purpose (ADK would
+    # print its traceback), and recent ADK versions log a tuning hint (context_cache_config) when
+    # the runner is built. Only the demo does this; the level is put back at the end.
+    adk_log = logging.getLogger("google_adk")
+    level_before = adk_log.level
+    adk_log.setLevel(logging.CRITICAL)
     runner = InMemoryRunner(agent=root_agent, app_name="trip_demo")
-    # The last question fails on purpose (to show an error on the board): keep ADK's traceback out of the terminal.
-    logging.getLogger("google_adk").setLevel(logging.CRITICAL)
     for i, question in enumerate(questions or QUESTIONS):
         if i:
             await asyncio.sleep(pause)
@@ -35,4 +39,8 @@ async def play(questions=None, pause: float = 2.5) -> None:
                         print(f"  {event.author}: {text}")
         except Exception as error:  # the Atlantis question fails on purpose
             print(f"  (run failed: {error})")
-    await runner.close()
+    try:
+        await runner.close()
+    except Exception:
+        pass
+    adk_log.setLevel(level_before)

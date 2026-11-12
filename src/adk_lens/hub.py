@@ -27,8 +27,63 @@ MAX_VERSIONS = 30
 PARTIAL_KEEP = 300  # streamed text chunks are noisy; keep them short in history
 
 
+REAP_EVERY = 3.0  # seconds between two looks at the processes that have a request in progress
+
+
 def data_dir() -> Path:
     return Path(os.environ.get("ADK_LENS_HOME") or Path.home() / ".adk-lens")
+
+
+def _sha(value) -> str:
+    return hashlib.sha1(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()[:10]
+
+
+def shape_hash(topo: dict) -> str:
+    """Fingerprint of the structure only: which nodes (id, name, kind, parent) and which edges.
+
+    It does not look at instructions, descriptions or model names, so it is the same
+    with and without ADK_LENS_CONTENT=0.
+    """
+    nodes = sorted(
+        [str(n.get("id")), str(n.get("name")), str(n.get("kind")), str(n.get("parent"))]
+        for n in topo.get("nodes") or [] if isinstance(n, dict)
+    )
+    edges = sorted(
+        [str(e.get("from")), str(e.get("to")), str(e.get("kind")), str(e.get("order"))]
+        for e in topo.get("edges") or [] if isinstance(e, dict)
+    )
+    return _sha([str(topo.get("root")), nodes, edges])
+
+
+def full_hash(topo: dict) -> str:
+    """Fingerprint of everything shown on the map (structure, instructions, descriptions, models)."""
+    return _sha([topo.get("root"), topo.get("nodes"), topo.get("edges")])
+
+
+def pid_alive(pid) -> bool:
+    """Is that process still there? When in doubt, say yes."""
+    try:
+        pid = int(pid)
+        if pid <= 0:
+            return True
+        if os.name == "nt":
+            import ctypes
+
+            kernel = ctypes.windll.kernel32
+            handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if not handle:
+                return kernel.GetLastError() == 5  # access denied: it exists
+            try:
+                code = ctypes.c_ulong()
+                return not kernel.GetExitCodeProcess(handle, ctypes.byref(code)) or code.value == 259
+            finally:
+                kernel.CloseHandle(handle)
+        os.kill(pid, 0)  # signal 0: only checks, sends nothing
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return True
 
 
 class Store:
@@ -41,6 +96,8 @@ class Store:
         self.notes = None
         self.last_activity = time.monotonic()
         self.clients = 0
+        self.open_runs: dict[str, dict] = {}  # run id -> {app, session, pid} until run_end / run_error
+        self._suspects: set = set()
         self._load()
 
     # -- persistence (small files: versions and notes only) ---------------
@@ -48,8 +105,17 @@ class Store:
         try:
             self.versions = json.loads((data_dir() / "versions.json").read_text("utf-8"))
             for app, items in self.versions.items():
-                if items:
-                    self.apps[app] = items[-1]["topology"]
+                if not items:
+                    continue
+                for item in items:  # files written by an older lens: fill in what is new
+                    topo = item["topology"]
+                    item["shape"] = shape_hash(topo)
+                    item["hash"] = item["shape"] if item.get("content") is False else full_hash(topo)
+                    item.setdefault("seen", item.get("ts"))
+                current = [item for item in items if item.get("current")]
+                for item in items:
+                    item["current"] = item is (current[-1] if current else items[-1])
+                self.apps[app] = self._current(items)["topology"]
         except Exception:
             self.versions = {}
         try:
@@ -74,9 +140,16 @@ class Store:
             for ev in incoming:
                 if not isinstance(ev, dict) or not isinstance(ev.get("type"), str):
                     continue
-                if ev["type"] == "topology":
+                kind = ev["type"]
+                if kind == "topology":
                     if not self._topology(ev):
                         continue  # unchanged shape: nothing new to show
+                run = ev.get("run")
+                if isinstance(run, str) and run:
+                    if kind == "run_start":
+                        self.open_runs[run] = {"app": ev.get("app"), "session": ev.get("session"), "pid": ev.get("pid")}
+                    elif kind in ("run_end", "run_error"):
+                        self.open_runs.pop(run, None)
                 self.seq += 1
                 ev["seq"] = self.seq
                 self.events.append(ev)
@@ -84,19 +157,88 @@ class Store:
                 del self.events[: len(self.events) - MAX_EVENTS]
             self.lock.notify_all()
 
+    def reap(self, alive=pid_alive) -> int:
+        """Close the requests whose process is gone (killed, crashed, Ctrl+C).
+
+        A process must be seen missing on two looks in a row, so that the last
+        events it sent while exiting have arrived. Returns how many were closed.
+        """
+        with self.lock:
+            pids = {r.get("pid") for r in self.open_runs.values() if isinstance(r.get("pid"), int)}
+        gone = {pid for pid in pids if not alive(pid)}
+        confirmed, self._suspects = gone & self._suspects, gone
+        if not confirmed:
+            return 0
+        closing = []
+        with self.lock:
+            for run, info in list(self.open_runs.items()):
+                if info.get("pid") in confirmed:
+                    closing.append({
+                        "type": "run_end", "app": info.get("app"), "session": info.get("session"), "run": run,
+                        "pid": info.get("pid"), "ts": time.time(), "interrupted": True, "reason": "process_gone",
+                    })
+        if closing:
+            activity = self.last_activity
+            self.add(closing)
+            self.last_activity = activity  # house-keeping is not a sign of life
+        return len(closing)
+
+    @staticmethod
+    def _current(history: list) -> dict | None:
+        for item in history:
+            if item.get("current"):
+                return item
+        return history[-1] if history else None
+
     def _topology(self, ev: dict) -> bool:
+        """Record the app's shape. True when the event is worth showing (new or changed)."""
         app = str(ev.get("app") or "app")
         topo = {k: ev.get(k) for k in ("app", "root", "nodes", "edges")}
-        digest = hashlib.sha1(json.dumps(topo, sort_keys=True, default=str).encode()).hexdigest()[:10]
+        stripped = ev.get("content") is False  # sent with ADK_LENS_CONTENT=0: no instructions, no descriptions
+        shape = shape_hash(topo)
+        digest = shape if stripped else full_hash(topo)
         history = self.versions.setdefault(app, [])
-        if history and history[-1].get("hash") == digest:
-            self.apps[app] = topo
-            return app not in {e.get("app") for e in self.events if e.get("type") == "topology"}
-        version = (history[-1]["v"] + 1) if history else 1
-        history.append({"v": version, "ts": ev.get("ts") or time.time(), "hash": digest, "topology": topo})
-        del history[:-MAX_VERSIONS]
-        self.apps[app] = topo
-        ev["version"] = version
+        current = self._current(history)
+        recent_first = ([current] if current else []) + [v for v in reversed(history) if v is not current]
+
+        match = None
+        completed = False
+        if stripped:
+            # Without content we can only compare structures.
+            match = next((v for v in recent_first if v.get("shape") == shape), None)
+        else:
+            match = next((v for v in recent_first if v.get("hash") == digest), None)
+            if match is None:
+                # The same structure was first recorded without content: complete it, it is not a change.
+                match = next((v for v in recent_first if v.get("shape") == shape and v.get("content") is False), None)
+                if match is not None:
+                    match.pop("content", None)
+                    match.update(hash=digest, topology=topo)
+                    completed = True
+                    self._save("versions.json", self.versions)
+
+        if match is not None and match is current:
+            self.apps[app] = match["topology"]
+            ev["version"] = match["v"]
+            return completed or app not in {e.get("app") for e in self.events if e.get("type") == "topology"}
+
+        now = ev.get("ts") or time.time()
+        for item in history:
+            item["current"] = False
+        if match is not None:
+            # Back to a shape we already know: no duplicate, that version is the current one again.
+            match.update(current=True, seen=now)
+            ev["reverted"] = True
+        else:
+            match = {"v": max((v["v"] for v in history), default=0) + 1, "ts": now, "seen": now,
+                     "hash": digest, "shape": shape, "current": True, "topology": topo}
+            if stripped:
+                match["content"] = False
+            history.append(match)
+            while len(history) > MAX_VERSIONS:
+                history.remove(next(v for v in history if v is not match))
+        self.apps[app] = match["topology"]
+        ev["version"] = match["v"]
         self._save("versions.json", self.versions)
         return True
 
@@ -107,6 +249,7 @@ class Store:
                 "events": list(self.events),
                 "apps": dict(self.apps),
                 "versions": {k: list(v) for k, v in self.versions.items()},
+                "current": {k: self._current(v)["v"] for k, v in self.versions.items() if v},
                 "notes": self.notes,
                 "version": __version__,
             }
@@ -126,6 +269,7 @@ class Store:
     def clear(self) -> None:
         with self.lock:
             self.events = []
+            self.open_runs = {}
             self.seq += 1
             self.events.append({"seq": self.seq, "ts": time.time(), "type": "cleared"})
             self.lock.notify_all()
@@ -308,6 +452,9 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def handle_error(self, request, client_address) -> None:
+        pass  # a client that hangs up early is not worth a traceback
+
 
 def serve(port: int, idle_hours: float = 8.0) -> int:
     store = Store()
@@ -328,7 +475,16 @@ def serve(port: int, idle_hours: float = 8.0) -> int:
                 server.shutdown()
                 return
 
+    def reaper() -> None:
+        while True:
+            time.sleep(REAP_EVERY)
+            try:
+                store.reap()
+            except Exception:
+                pass
+
     threading.Thread(target=watchdog, daemon=True).start()
+    threading.Thread(target=reaper, daemon=True).start()
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
@@ -343,7 +499,13 @@ def main(argv=None) -> int:
     parser.add_argument("--port", type=int, default=int(os.environ.get("ADK_LENS_PORT", 4790)))
     parser.add_argument("--idle-hours", type=float, default=8.0)
     args = parser.parse_args(argv)
-    return serve(args.port, args.idle_hours)
+    code = serve(args.port, args.idle_hours)
+    if code == 2:
+        import sys
+
+        print(f"ADK Lens: port {args.port} is already in use. Pick another one, for example: "
+              f"ADK_LENS_PORT={args.port + 1}", file=sys.stderr)
+    return code
 
 
 if __name__ == "__main__":

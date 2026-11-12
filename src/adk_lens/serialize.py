@@ -105,19 +105,32 @@ def text_of(content: Any) -> str:
     return "\n".join(p["text"] for p in parts_of(content) if p.get("kind") == "text")
 
 
+# What survives ADK_LENS_CONTENT=0: identifiers, names, timings, counts and flags. Nothing a
+# person wrote (prompts, instructions, descriptions, docstrings) and nothing a model or a tool
+# produced (answers, arguments, results, error messages, state values).
+_KEEP = {
+    "type", "app", "run", "session", "agent", "tool", "model", "call_id", "ts", "pid",
+    "duration_ms", "tokens_in", "tokens_out", "messages", "finish", "final", "partial",
+    "transfer_to", "escalate", "author", "root", "root_agent", "error_type", "nested",
+    "agent_tool", "path", "branch", "event_id", "state_keys", "source", "interrupted", "reason",
+}
+_KEEP_NODE = {"id", "name", "kind", "cls", "parent", "model", "output_key", "mode", "max_iterations", "prefix"}
+_KEEP_EDGE = {"from", "to", "kind", "order", "label"}
+
+
 def redact(event: dict) -> dict:
-    """Drop content fields, keep structure (names, timings, counts)."""
-    keep = {
-        "type", "app", "run", "session", "agent", "tool", "model", "call_id", "ts", "pid",
-        "duration_ms", "tokens_in", "tokens_out", "final", "partial", "transfer_to",
-        "escalate", "author", "nodes", "edges", "root", "error_type", "nested", "path",
-        "state_keys", "calls", "source",
-    }
-    slim = {k: v for k, v in event.items() if k in keep}
-    if "calls" in slim:
-        slim["calls"] = [{"name": c.get("name")} for c in slim["calls"] or []]
+    """Drop content fields, keep structure (names, timings, counts). Marks the event `content: false`."""
+    slim = {k: v for k, v in event.items() if k in _KEEP}
+    slim["content"] = False
+    if isinstance(event.get("calls"), list):
+        slim["calls"] = [{"name": c.get("name")} for c in event["calls"] if isinstance(c, dict)]
+    if isinstance(event.get("tools"), list):
+        slim["tools"] = [t for t in event["tools"] if isinstance(t, str)]
     if event.get("type") == "topology":
         slim["nodes"] = [
-            {k: v for k, v in n.items() if k not in ("instruction",)} for n in event.get("nodes", [])
+            {k: v for k, v in n.items() if k in _KEEP_NODE} for n in event.get("nodes") or [] if isinstance(n, dict)
+        ]
+        slim["edges"] = [
+            {k: v for k, v in e.items() if k in _KEEP_EDGE} for e in event.get("edges") or [] if isinstance(e, dict)
         ]
     return slim

@@ -44,18 +44,27 @@ class LensPlugin(BasePlugin):
         self._started: dict[tuple, float] = {}
         self._model_seq = 0
         self._model_open: dict[tuple, list] = {}
-        self._topology_sent: dict[str, int] = {}
+        self._open: dict[str, tuple[str, str]] = {}  # run id -> (app, session) until its end is reported
+        self._default_app: str | None = None  # app of the last runner the lens was attached to
 
     # -- helpers -----------------------------------------------------------
     def _run(self, invocation_id: str) -> str:
         return self._run_alias.get(invocation_id, invocation_id)
 
-    @staticmethod
-    def _ctx_ids(ctx: Any) -> tuple[str, str, str]:
+    def _ctx_ids(self, ctx: Any) -> tuple[str, str, str]:
         """(app, session id, invocation id) from any ADK context."""
+        invocation = str(getattr(ctx, "invocation_id", "") or "")
         session = getattr(ctx, "session", None)
-        app = getattr(session, "app_name", None) or getattr(ctx, "app_name", None) or "app"
-        return str(app), str(getattr(session, "id", "") or ""), str(getattr(ctx, "invocation_id", "") or "")
+        if session is None:
+            # ADK 1.7 to 1.9: callback and tool contexts do not expose the session themselves.
+            session = getattr(getattr(ctx, "_invocation_context", None), "session", None)
+        app = getattr(session, "app_name", None) or getattr(ctx, "app_name", None)
+        session_id = getattr(session, "id", None)
+        if not app or not session_id:
+            known = self._open.get(self._run(invocation))
+            if known:
+                app, session_id = app or known[0], session_id or known[1]
+        return str(app or self._default_app or "app"), str(session_id or ""), invocation
 
     def _base(self, ctx: Any, kind: str, **extra: Any) -> dict:
         app, session, invocation = self._ctx_ids(ctx)
@@ -68,6 +77,7 @@ class LensPlugin(BasePlugin):
     def announce(self, app_name: str, root: Any, source: str = "runner") -> None:
         """Send the app's shape (called when a Runner is created)."""
         try:
+            self._default_app = app_name
             if root is None:
                 return
             topo = topology.build(root, app_name)
@@ -88,8 +98,19 @@ class LensPlugin(BasePlugin):
             return
         if len(self._run_alias) > 5000:
             self._run_alias.clear()
+        if len(self._open) > 5000:
+            self._open.clear()
         content = getattr(invocation_context, "user_content", None)
         self._started[("run", invocation)] = time.monotonic()
+        self._open[invocation] = (app, session)
+        try:
+            from .autoload import _current_run
+
+            holder = _current_run.get()
+            if isinstance(holder, dict) and "run" not in holder:
+                holder["run"] = invocation
+        except Exception:
+            pass
         emit({
             "type": "run_start", "app": app, "session": session, "run": invocation,
             "user": getattr(invocation_context, "user_id", None),
@@ -104,6 +125,7 @@ class LensPlugin(BasePlugin):
         if invocation in self._run_alias:
             self._run_alias.pop(invocation, None)
             return
+        self._open.pop(invocation, None)
         emit({"type": "run_end", "app": app, "session": session, "run": invocation,
               "duration_ms": self._took(("run", invocation))})
 
@@ -113,9 +135,39 @@ class LensPlugin(BasePlugin):
         if invocation in self._run_alias:
             self._run_alias.pop(invocation, None)
             return
+        self._open.pop(invocation, None)
         emit({"type": "run_error", "app": app, "session": session, "run": invocation,
               "error": clip(error, 2000), "error_type": type(error).__name__,
               "duration_ms": self._took(("run", invocation))})
+
+    def run_finished(self, invocation: str | None, error: BaseException | None = None,
+                     interrupted: bool = False) -> None:
+        """Called when a `Runner.run_async` stream is over (see autoload).
+
+        ADK reports the end of a request through the callbacks above, but not in
+        every version and not in every situation (ADK before 2.5 has no "run failed"
+        callback; a caller may also stop reading half-way). This closes whatever is
+        still open, so a request never stays "live" for ever. Never raises.
+        """
+        try:
+            if not invocation:
+                return
+            if invocation in self._run_alias:
+                self._run_alias.pop(invocation, None)
+                return
+            known = self._open.pop(invocation, None)
+            if known is None:
+                return  # ADK already told us
+            base = {"app": known[0], "session": known[1], "run": invocation,
+                    "duration_ms": self._took(("run", invocation))}
+            if error is not None:
+                emit({"type": "run_error", **base, "error": clip(error, 2000), "error_type": type(error).__name__})
+            elif interrupted:
+                emit({"type": "run_end", **base, "interrupted": True, "reason": "cancelled"})
+            else:
+                emit({"type": "run_end", **base})
+        except Exception:
+            pass
 
     @_quiet
     async def on_event_callback(self, *, invocation_context, event) -> None:
@@ -124,7 +176,9 @@ class LensPlugin(BasePlugin):
         parts = parts_of(getattr(event, "content", None))
         text = "\n".join(p["text"] for p in parts if p.get("kind") == "text")
         try:
-            final = bool(event.is_final_response())
+            # ADK also calls "final" the empty event it records when a request fails:
+            # an answer has to carry something (text, a file, a tool result).
+            final = bool(parts) and bool(event.is_final_response())
         except Exception:
             final = False
         out = self._base(
