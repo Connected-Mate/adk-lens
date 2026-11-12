@@ -41,6 +41,7 @@ class LensPlugin(BasePlugin):
         super().__init__(name=PLUGIN_NAME if name in ("", None) else name)
         self._run_alias: dict[str, str] = {}      # nested invocation id -> top run id
         self._nested_waiting: dict[tuple, str] = {}  # (app, agent name) -> top run id
+        self._nested_app: dict[str, str] = {}     # nested invocation id -> app of the top run
         self._started: dict[tuple, float] = {}
         self._model_seq = 0
         self._model_open: dict[tuple, list] = {}
@@ -58,7 +59,7 @@ class LensPlugin(BasePlugin):
         if session is None:
             # ADK 1.7 to 1.9: callback and tool contexts do not expose the session themselves.
             session = getattr(getattr(ctx, "_invocation_context", None), "session", None)
-        app = getattr(session, "app_name", None) or getattr(ctx, "app_name", None)
+        app = self._nested_app.get(invocation) or getattr(session, "app_name", None) or getattr(ctx, "app_name", None)
         session_id = getattr(session, "id", None)
         if not app or not session_id:
             known = self._open.get(self._run(invocation))
@@ -85,6 +86,13 @@ class LensPlugin(BasePlugin):
         except Exception:
             pass
 
+    def called_as_tool(self, agent_name: Any) -> bool:
+        """True while a tool call to this agent is under way (ADK builds a runner for it then)."""
+        try:
+            return any(key[1] == agent_name for key in self._nested_waiting)
+        except Exception:
+            return False
+
     # -- run ---------------------------------------------------------------
     @_quiet
     async def before_run_callback(self, *, invocation_context) -> None:
@@ -92,12 +100,19 @@ class LensPlugin(BasePlugin):
         agent = getattr(invocation_context, "agent", None)
         agent_name = getattr(agent, "name", None)
         parent = self._nested_waiting.pop((app, agent_name), None)
+        if parent is None and app == agent_name:
+            # ADK 1.x runs an agent used as a tool under the agent's own name, not the app's.
+            key = next((k for k in self._nested_waiting if k[1] == agent_name), None)
+            if key is not None:
+                parent = self._nested_waiting.pop(key)
+                self._nested_app[invocation] = key[0]
         if parent is not None:
             # An agent used as a tool runs in its own little runner: fold it into the parent run.
             self._run_alias[invocation] = parent
             return
         if len(self._run_alias) > 5000:
             self._run_alias.clear()
+            self._nested_app.clear()
         if len(self._open) > 5000:
             self._open.clear()
         content = getattr(invocation_context, "user_content", None)
@@ -124,6 +139,7 @@ class LensPlugin(BasePlugin):
         app, session, invocation = self._ctx_ids(invocation_context)
         if invocation in self._run_alias:
             self._run_alias.pop(invocation, None)
+            self._nested_app.pop(invocation, None)
             return
         self._open.pop(invocation, None)
         emit({"type": "run_end", "app": app, "session": session, "run": invocation,
@@ -134,6 +150,7 @@ class LensPlugin(BasePlugin):
         app, session, invocation = self._ctx_ids(invocation_context)
         if invocation in self._run_alias:
             self._run_alias.pop(invocation, None)
+            self._nested_app.pop(invocation, None)
             return
         self._open.pop(invocation, None)
         emit({"type": "run_error", "app": app, "session": session, "run": invocation,
@@ -154,6 +171,7 @@ class LensPlugin(BasePlugin):
                 return
             if invocation in self._run_alias:
                 self._run_alias.pop(invocation, None)
+                self._nested_app.pop(invocation, None)
                 return
             known = self._open.pop(invocation, None)
             if known is None:
@@ -191,9 +209,10 @@ class LensPlugin(BasePlugin):
             branch=getattr(event, "branch", None),
             event_id=getattr(event, "id", None),
         )
-        # an event carries its own invocation id; prefer it (nested runs)
+        # An event carries its own invocation id; prefer it (nested runs) when it is a request
+        # we know: ADK 1.x gives a made-up id to the event that groups several tool results.
         ev_inv = getattr(event, "invocation_id", None)
-        if ev_inv:
+        if ev_inv and self._run(str(ev_inv)) in self._open:
             out["run"] = self._run(str(ev_inv))
         node_info = getattr(event, "node_info", None)
         if getattr(node_info, "path", None):
@@ -324,8 +343,15 @@ class LensPlugin(BasePlugin):
                         tool=getattr(tool, "name", None), call_id=call_id,
                         args=safe(tool_args), agent_tool=is_agent_tool))
 
+    def _tool_over(self, tool, tool_context) -> None:
+        """An agent used as a tool has answered: nothing is waiting for its runner any more."""
+        inner = getattr(tool, "agent", None)
+        if inner is not None and self._nested_waiting:
+            self._nested_waiting.pop((self._ctx_ids(tool_context)[0], getattr(inner, "name", None)), None)
+
     @_quiet
     async def after_tool_callback(self, *, tool, tool_args, tool_context, result) -> None:
+        self._tool_over(tool, tool_context)
         call_id = self._call_id(tool, tool_context)
         emit(self._base(tool_context, "tool_end",
                         agent=getattr(tool_context, "agent_name", None),
@@ -334,6 +360,7 @@ class LensPlugin(BasePlugin):
 
     @_quiet
     async def on_tool_error_callback(self, *, tool, tool_args, tool_context, error) -> None:
+        self._tool_over(tool, tool_context)
         call_id = self._call_id(tool, tool_context)
         emit(self._base(tool_context, "tool_error",
                         agent=getattr(tool_context, "agent_name", None),

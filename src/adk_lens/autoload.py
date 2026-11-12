@@ -180,12 +180,14 @@ def _attach(runner) -> None:
     plugins = getattr(manager, "plugins", [])
     if not any(isinstance(p, LensPlugin) or getattr(p, "name", None) == PLUGIN_NAME for p in plugins):
         manager.register_plugin(lens_plugin)
-    # Runners created inside a tool call (an agent used as a tool) are part of a
-    # bigger app whose shape is already known: only announce real, top-level apps.
-    if type(runner).__name__ == "_NestedRunner":
-        return
     app = getattr(runner, "app", None)
     root = getattr(app, "root_agent", None) or getattr(runner, "agent", None)
+    # Runners created inside a tool call (an agent used as a tool) are part of a
+    # bigger app whose shape is already known: only announce real, top-level apps.
+    # Recent ADK versions use a class of their own for them; older ones a plain Runner,
+    # built while the tool call to that agent is under way.
+    if type(runner).__name__ == "_NestedRunner" or lens_plugin.called_as_tool(getattr(root, "name", None)):
+        return
     name = getattr(runner, "app_name", None) or getattr(app, "name", None) or getattr(root, "name", "app")
     lens_plugin.announce(str(name), root)
 
