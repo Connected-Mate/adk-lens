@@ -1,6 +1,7 @@
 """The `adk-lens` command.
 
     adk-lens demo                 play a demo (no API key) and show the lens
+    adk-lens demo hard            a harder demo: a rail desk with many agents, a web site, e-mail
     adk-lens web [...]            exactly `adk web [...]`, with the lens on
     adk-lens run my_agent         exactly `adk run my_agent`, with the lens on
     adk-lens python my_script.py  run your own script with the lens on
@@ -223,13 +224,18 @@ def main(argv=None) -> int:
         if not _board(required=True):
             return 1
         os.environ["ADK_LENS_QUIET"] = "1"
-        _say(f"\n  ADK Lens demo. Open {transport.url()}\n")
+        # ADK 1.x makes the tracing library log "Failed to detach context" at hand-offs: not the demo's story.
+        import logging
+
+        logging.getLogger("opentelemetry.context").setLevel(logging.CRITICAL)
+        hard = "hard" in rest
+        _say(f"\n  ADK Lens {'hard demo (a rail desk)' if hard else 'demo'}. Open {transport.url()}\n")
         from . import demo
 
         loops = 0
         try:
             while True:
-                asyncio.run(demo.play())
+                asyncio.run(demo.play_hard() if hard else demo.play())
                 transport.flush(3.0)
                 loops += 1
                 if "--once" in rest:

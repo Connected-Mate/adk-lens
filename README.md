@@ -14,7 +14,9 @@ pip install "git+https://github.com/Connected-Mate/adk-lens"
 adk-lens demo
 ```
 
-Then open http://127.0.0.1:4790. Needs Python 3.10 or later (the `python3` that ships with macOS is 3.9:
+Then open http://127.0.0.1:4790. Want something harder to look at? `adk-lens demo hard` plays a rail desk with
+15 agents, a loop, two agents at once, a local web site and e-mails that never leave your machine.
+Needs Python 3.10 or later (the `python3` that ships with macOS is 3.9:
 [AGENT-SETUP.md](AGENT-SETUP.md), step 1b, shows how to get a newer one next to it).
 
 Prefer to let your coding agent do it? Give it [AGENT-SETUP.md](AGENT-SETUP.md).
@@ -72,6 +74,7 @@ relay: on ADK before 2.5 a failed request is then closed only when the program e
 | Command | What it does |
 |---|---|
 | `adk-lens demo` | Plays a small multi-agent demo with a scripted model |
+| `adk-lens demo hard` | Plays a harder demo: a rail desk with 15 agents, real tool work and failures |
 | `adk-lens <any adk command>` | Runs `adk` with the lens on |
 | `adk-lens python script.py` | Runs your script with the lens on |
 | `adk-lens on` / `off` | Always-on mode |

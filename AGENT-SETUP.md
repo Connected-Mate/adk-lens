@@ -139,6 +139,7 @@ instruction to what the person wants it to do, then continue with step 4 (Path A
 This plays a short scripted conversation with a fake model (no API key, no network call to a model),
 prints it in the terminal, starts the board in the background and returns after about 15 seconds.
 The last demo request fails on purpose ("Unknown city: Atlantis"): that is part of the demo, not an error.
+A harder one, about 70 seconds: `.venv/bin/adk-lens demo hard --once --no-open` (a rail desk with 15 agents; its last request also fails on purpose).
 If the first line is `ADK Lens: port 4790 is used by another program...`, set `ADK_LENS_PORT` as in step 1b and run it again.
 
 There is nothing to configure. Useful optional settings, only if the person asks:
