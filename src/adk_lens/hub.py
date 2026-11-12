@@ -269,7 +269,8 @@ class Store:
     def clear(self) -> None:
         with self.lock:
             self.events = []
-            self.open_runs = {}
+            # open_runs is kept: a request still running after a clear must be closed
+            # like any other when it ends or when its program disappears.
             self.seq += 1
             self.events.append({"seq": self.seq, "ts": time.time(), "type": "cleared"})
             self.lock.notify_all()

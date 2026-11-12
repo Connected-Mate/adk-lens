@@ -280,12 +280,16 @@ class _Sender:
         no hub is started here, nothing is retried, and without a board that
         already answers we give up within about 0.3 s."""
         try:
-            if self._off or not self._queue or self._pid != os.getpid():
+            if self._off or self._pid != os.getpid():
                 return
             begun = time.monotonic()
+            # Taking the lock also waits for a batch the sender thread is posting right now:
+            # without this, the end of the last request of a short script was lost.
             if not self._send_lock.acquire(timeout=EXIT_BUDGET):
                 return  # the sender thread is busy looking for the board: let go
             try:
+                if not self._queue:
+                    return
                 left = max(0.05, EXIT_BUDGET - (time.monotonic() - begun))
                 if not self._hub_ok and ping(left) is None:
                     return

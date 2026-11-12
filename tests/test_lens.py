@@ -633,3 +633,49 @@ def test_demo_answers_all_three_questions():
     assert any(author == "writer" and "Marseille" in (texts[0] or "") for author, texts in trip)
     with pytest.raises(ValueError, match="Atlantis"):
         asyncio.run(_ask(runner, "And what's the weather in Atlantis?"))
+
+
+SHORT_SCRIPT = """
+import asyncio, sys
+from google.adk.runners import InMemoryRunner
+from google.genai import types
+from adk_lens.demo.trip_demo import agent
+agent.PACE = 0
+async def main():
+    runner = InMemoryRunner(agent=agent.root_agent, app_name="short_script")
+    session = await runner.session_service.create_session(app_name="short_script", user_id="t")
+    try:
+        async for _ in runner.run_async(user_id="t", session_id=session.id,
+                new_message=types.Content(role="user", parts=[types.Part(text=sys.argv[1])])):
+            pass
+    except ValueError:
+        pass
+asyncio.run(main())
+"""
+
+
+@pytest.mark.parametrize("question, ending", [("weather in Atlantis", "run_error"), ("weather in Lisbon", "run_end")])
+def test_last_request_of_a_short_script_keeps_its_real_ending(hub, question, ending):
+    """A script that exits right after its last request: the ending must reach the board,
+    not be replaced later by "interrupted"."""
+    for _ in range(4):
+        _req(hub, "POST", "/api/clear", {}, {"X-ADK-Lens": "1"})
+        subprocess.run([sys.executable, "-c", SHORT_SCRIPT, question], timeout=30, check=True,
+                       capture_output=True, env={**os.environ, "ADK_LENS": "1", "ADK_LENS_QUIET": "1"})
+        ends = [e for e in _state(hub)["events"] if e["type"] in ("run_end", "run_error")]
+        assert [e["type"] for e in ends] == [ending] and not ends[0].get("interrupted"), ends
+
+
+def test_clear_does_not_orphan_a_running_request(hub):
+    """Cleared while a request runs, then its program dies: the request is still closed."""
+    h = {"X-ADK-Lens": "1"}
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        _req(hub, "POST", "/api/ingest", {"events": [
+            {"type": "run_start", "app": "orphan", "run": "orphan-1", "session": "s", "pid": proc.pid}]}, h)
+        _req(hub, "POST", "/api/clear", {}, h)
+    finally:
+        proc.kill()
+        proc.wait(5)
+    assert _wait(lambda: any(e["type"] == "run_end" and e.get("run") == "orphan-1" and e.get("interrupted")
+                             for e in _state(hub)["events"]), 20)

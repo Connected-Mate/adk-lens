@@ -80,6 +80,18 @@ relay: on ADK before 2.5 a failed request is then closed only when the program e
 
 Settings: `ADK_LENS_PORT` (default 4790), `ADK_LENS_CONTENT=0`, `ADK_LENS_QUIET=1`, `ADK_LENS_OPEN=0`.
 
+## Remove it
+
+```
+adk-lens stop
+adk-lens off
+pip uninstall adk-lens
+```
+
+In that order: `stop` closes the board, `off` removes the always-on switch, then the package goes. Your agents were
+never changed, so there is nothing to undo there. Notes and versions live in `~/.adk-lens`; delete that folder too if
+you want nothing left.
+
 ## Limits
 
 - Python ADK only, google-adk 1.7.0 or later (the first version with plugins). Built on 2.14; the demo and the
