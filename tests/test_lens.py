@@ -662,7 +662,8 @@ def test_last_request_of_a_short_script_keeps_its_real_ending(hub, question, end
         _req(hub, "POST", "/api/clear", {}, {"X-ADK-Lens": "1"})
         subprocess.run([sys.executable, "-c", SHORT_SCRIPT, question], timeout=30, check=True,
                        capture_output=True, env={**os.environ, "ADK_LENS": "1", "ADK_LENS_QUIET": "1"})
-        ends = [e for e in _state(hub)["events"] if e["type"] in ("run_end", "run_error")]
+        ends = [e for e in _state(hub)["events"]
+                if e["type"] in ("run_end", "run_error") and e.get("app") == "short_script"]
         assert [e["type"] for e in ends] == [ending] and not ends[0].get("interrupted"), ends
 
 
