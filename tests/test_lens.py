@@ -41,6 +41,10 @@ def hub(tmp_path_factory):
         time.sleep(0.1)
     assert transport.ping(), "hub did not start"
     yield port
+    # Anything still waiting to be sent would bring a board back when Python exits: send it,
+    # then mark this (temporary) home as stopped so no board outlives the tests.
+    transport.flush(2)
+    transport.mark_stopped()
     proc.terminate()
     proc.wait(5)
 
