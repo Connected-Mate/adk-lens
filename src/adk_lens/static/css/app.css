@@ -272,7 +272,7 @@ b { font-weight: 600; }
   position: absolute; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px;
   border-radius: 22px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
   text-align: left; box-shadow: var(--shadow-1);
-  transition: opacity 300ms var(--ease), border-color 200ms var(--ease), box-shadow 200ms var(--ease), background-color 200ms var(--ease), transform 160ms var(--ease);
+  transition: opacity 300ms var(--ease), border-color 320ms var(--ease), box-shadow 320ms var(--ease), background-color 200ms var(--ease), transform 160ms var(--ease);
   animation: node-in 520ms var(--ease) backwards;
   animation-delay: calc(var(--i, 0) * 28ms);
 }
@@ -307,7 +307,7 @@ b { font-weight: 600; }
   position: absolute; border-radius: 30px; border: 1.5px dashed var(--line-3);
   background: color-mix(in oklab, var(--container) 62%, transparent); pointer-events: none;
   animation: node-in 520ms var(--ease) backwards;
-  transition: opacity 300ms var(--ease), border-color 200ms var(--ease);
+  transition: opacity 300ms var(--ease), border-color 320ms var(--ease), box-shadow 320ms var(--ease);
 }
 .frame-head {
   pointer-events: auto; position: absolute; left: 14px; top: 10px; display: inline-flex; align-items: center; gap: 8px;
@@ -327,7 +327,8 @@ b { font-weight: 600; }
   .frame-head:hover { background: var(--container-3); }
 }
 
-.edge-line { fill: none; stroke: var(--line-3); stroke-width: 1.6; stroke-linecap: round; transition: stroke 240ms var(--ease), opacity 240ms var(--ease); }
+.edge-line { fill: none; stroke: var(--line-3); stroke-width: 1.6; stroke-linecap: round; transition: stroke 240ms var(--ease), stroke-width 240ms var(--ease), opacity 240ms var(--ease); }
+.edge { transition: opacity 300ms var(--ease); }
 .edge-head { fill: none; stroke: var(--line-3); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: stroke 240ms var(--ease); }
 .edge.k-uses_tool .edge-line { stroke-dasharray: 1 6; stroke-width: 2; }
 .edge.k-again .edge-line, .edge.k-uses_agent .edge-line { stroke-dasharray: 6 6; }
@@ -353,7 +354,7 @@ b { font-weight: 600; }
   content: ""; position: absolute; inset: -4px; border-radius: inherit; border: 2px solid var(--blue); pointer-events: none;
   animation: halo 1.5s var(--ease) infinite;
 }
-@keyframes halo { from { opacity: 0.75; transform: scale(1); } to { opacity: 0; transform: scale(1.07, 1.2); } }
+@keyframes halo { 0% { opacity: 0; transform: scale(1); } 14% { opacity: 0.75; transform: scale(1.004, 1.012); } 100% { opacity: 0; transform: scale(1.07, 1.2); } }
 .node.is-thinking .node-ico .ico { animation: think 1.3s var(--ease-move) infinite; }
 @keyframes think { 50% { transform: rotate(90deg) scale(1.18); } 100% { transform: rotate(180deg); } }
 .node.flash { animation: flash 620ms var(--ease); }
@@ -368,9 +369,14 @@ b { font-weight: 600; }
 }
 .node.is-selected { border-color: var(--ink); box-shadow: 0 0 0 2px var(--ink); }
 
-.ghost-line { fill: none; stroke: var(--blue); stroke-width: 2; stroke-dasharray: 3 7; stroke-linecap: round; opacity: 0.6; animation: flow 900ms linear infinite; }
-.dot { fill: var(--blue); stroke: var(--bg); stroke-width: 2.5; }
-.dot-halo { fill: var(--blue); opacity: 0.2; animation: dot-halo 1.2s var(--ease) infinite; transform-box: fill-box; transform-origin: center; }
+.ghost-line { fill: none; stroke: var(--blue); stroke-width: 2; stroke-dasharray: 3 7; stroke-linecap: round; opacity: 0.6; transition: opacity 220ms var(--ease); animation: flow 900ms linear infinite, fade-in 280ms var(--ease) backwards; }
+.ghost-line.is-out { opacity: 0; }
+/* The token that carries the request from one node to the next. It is never redrawn: it travels, and fades when there is no journey. */
+.token { will-change: transform; transition: opacity 260ms var(--ease); }
+.token.is-off { opacity: 0; }
+.token.is-hop { opacity: 0; transition-duration: 130ms; }
+.dot { fill: var(--blue); stroke: var(--bg); stroke-width: 2.5; transition: fill 240ms var(--ease); }
+.dot-halo { fill: var(--blue); opacity: 0.2; transition: fill 240ms var(--ease); animation: dot-halo 1.2s var(--ease) infinite; transform-box: fill-box; transform-origin: center; }
 @keyframes dot-halo { from { transform: scale(0.6); opacity: 0.35; } to { transform: scale(1.5); opacity: 0; } }
 .dot.tone-tool, .dot.tone-tool_result, .dot-halo.tone-tool, .dot-halo.tone-tool_result { fill: var(--green); }
 .dot.tone-answer, .dot-halo.tone-answer { fill: var(--ink); }
@@ -433,6 +439,8 @@ b { font-weight: 600; }
 .stamp.on-node { flex-direction: row; align-items: center; gap: 6px; }
 .stamp.on-node .stamp-face { width: 38px; height: 38px; font-size: 19px; flex: none; }
 .stamp.on-node .stamp-face.stamp-question { font-size: 22px; }
+/* On a node at the right edge of the map the word goes to the left of the mark, so it stays on screen. */
+.stamp.on-node.is-flipped { flex-direction: row-reverse; transform: translateX(calc(38px - 100%)); }
 .step-mark {
   position: absolute; pointer-events: auto; z-index: 2; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px 0 7px;
   border-radius: var(--pill); background: var(--paper-comment); color: var(--paper-ink); font-size: 12.5px; font-weight: 600;
@@ -534,19 +542,33 @@ b { font-weight: 600; }
 }
 .dock > * { pointer-events: auto; }
 .caption {
-  max-width: 100%; text-align: center; padding: 10px 20px; border-radius: var(--r-lg);
+  position: relative; max-width: 100%; text-align: center; padding: 10px 20px; border-radius: var(--r-lg);
   background: color-mix(in oklab, var(--bg) 92%, transparent); box-shadow: 0 0 0 1px var(--line-2), var(--shadow-2);
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden;
+  /* The pill takes the size of the new sentence instead of snapping to it (sizes set by motion.js). */
+  transition: width 340ms cubic-bezier(0.5, 0, 0.15, 1), height 340ms cubic-bezier(0.5, 0, 0.15, 1);
 }
 .caption:empty { display: none; }
+/* One sentence. The new one rises in a little after the old one has started to leave. */
+.cap-in {
+  display: flex; flex-direction: column; gap: 2px; flex: none;
+  transition: opacity 220ms var(--ease) 70ms, transform 300ms var(--ease) 70ms;
+}
+.cap-in.is-new { opacity: 0; transform: translateY(var(--cap-dy, 7px)); transition: none; }
+.cap-in.is-out {
+  position: absolute; left: 50%; top: 50%; pointer-events: none;
+  opacity: 0; transform: translateY(calc(var(--cap-dy, 7px) * -1)); filter: blur(3px);
+  transition: opacity 120ms var(--ease), transform 200ms var(--ease), filter 120ms var(--ease);
+}
 .cap-line { font-size: 20px; line-height: 1.3; letter-spacing: -0.012em; font-weight: 450; overflow-wrap: anywhere; }
 .cap-body { font-size: 14.5px; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .cap-body:empty { display: none; }
-.caption[data-tone="error"] .cap-line { color: var(--red); }
+.cap-in[data-tone="error"] .cap-line { color: var(--red); }
 .dock.no-run .player { display: none; }
 .dock.in-story:not(.no-run) .caption { display: none; }
 .player {
-  display: flex; align-items: center; gap: 4px; width: 100%; padding: 6px 12px 6px 8px; border-radius: var(--pill);
+  --gap: 4px;
+  display: flex; align-items: center; gap: var(--gap); width: 100%; padding: 6px 12px 6px 8px; border-radius: var(--pill);
   background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-3);
 }
 .play-btn {
@@ -554,34 +576,80 @@ b { font-weight: 600; }
   transition: transform 140ms var(--ease), background-color 160ms var(--ease);
 }
 .play-btn:active { transform: scale(0.94); }
+/* Play and pause share the button: one turns into the other. */
+.play-ico { position: relative; width: 22px; height: 22px; display: block; }
+.play-ico .ico { position: absolute; inset: 0; transition: opacity 160ms var(--ease), transform 240ms var(--ease), filter 160ms var(--ease); }
+.play-ico .ico:last-child, .play-btn.is-playing .play-ico .ico:first-child { opacity: 0; filter: blur(2px); }
+.play-ico .ico:last-child { transform: scale(0.5) rotate(-60deg); }
+.play-btn.is-playing .play-ico .ico:first-child { transform: scale(0.5) rotate(60deg); }
+.play-btn.is-playing .play-ico .ico:last-child { opacity: 1; filter: none; transform: none; }
 .play-btn.is-waiting { animation: waiting 1.4s var(--ease-move) infinite; }
 @keyframes waiting { 50% { box-shadow: 0 0 0 7px color-mix(in oklab, var(--ink) 12%, transparent); } }
+/* The progress line. The real slider is there, invisible, for the pointer, the keyboard and screen readers;
+   the line and the knob drawn over it only ever move with transform (see motion.js). */
+.scrub-wrap { position: relative; flex: 1 1 auto; min-width: 60px; height: 28px; margin: 0 10px; display: block; }
 .scrub {
-  flex: 1 1 auto; min-width: 60px; height: 28px; margin: 0 10px; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer;
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer;
+  appearance: none; -webkit-appearance: none; background: transparent;
 }
-.scrub::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--ink) var(--p, 0%), var(--container-3) var(--p, 0%)); }
-.scrub::-moz-range-track { height: 4px; border-radius: 4px; background: var(--container-3); }
-.scrub::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--ink); }
-.scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%; background: var(--ink); border: 2px solid var(--surface); box-shadow: var(--shadow-1); transition: transform 140ms var(--ease); }
-.scrub::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--ink); border: 2px solid var(--surface); }
-.scrub:active::-webkit-slider-thumb { transform: scale(1.25); }
-.count { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 52px; text-align: right; }
-.speed-btn { height: 32px; min-width: 44px; padding: 0 8px; border-radius: var(--pill); font-size: 13.5px; font-weight: 550; color: var(--ink); font-variant-numeric: tabular-nums; transition: background-color 160ms var(--ease); }
-.speed-btn:hover { background: var(--container-2); }
-.live-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: var(--pill); background: var(--tint-red); color: var(--ink); font-size: 13.5px; font-weight: 550; white-space: nowrap; }
+.scrub::-webkit-slider-runnable-track { height: 28px; }
+.scrub::-moz-range-track { height: 28px; }
+.scrub::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 28px; }
+.scrub::-moz-range-thumb { width: 16px; height: 28px; border: 0; }
+.scrub-track { position: absolute; left: 0; right: 0; top: 12px; height: 4px; border-radius: 4px; background: var(--container-3); overflow: hidden; pointer-events: none; }
+.scrub-fill, .scrub-rail { position: absolute; left: 8px; right: 8px; top: 0; bottom: 0; pointer-events: none; will-change: transform; }
+.scrub-fill::before { content: ""; position: absolute; right: 100%; top: 0; bottom: 0; width: calc(100% + 8px); background: var(--ink); }
+.scrub-knob {
+  position: absolute; left: -8px; top: 6px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--ink); border: 2px solid var(--surface); box-shadow: var(--shadow-1);
+  transition: transform 160ms var(--ease);
+}
+.scrub:active ~ .scrub-rail .scrub-knob, .scrub-wrap.is-dragging .scrub-knob { transform: scale(1.25); }
+.scrub:focus-visible ~ .scrub-rail .scrub-knob { outline: 2px solid var(--blue); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .scrub:hover ~ .scrub-rail .scrub-knob { transform: scale(1.12); } .scrub:active ~ .scrub-rail .scrub-knob { transform: scale(1.25); } }
+.count { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: pre; min-width: 52px; text-align: right; flex: none; }
+/* Each figure has its own fixed place (as wide as the total): "3 / 12" to "4 / 12" moves nothing. */
+.count-i, .count-n { display: inline-block; min-width: calc(var(--digits, 1) * 1ch); }
+.count-i { text-align: right; }
+.count-n { text-align: left; }
+.roll { display: inline-block; }
+.roll.from-below { animation: roll-up 200ms var(--ease) backwards; }
+.roll.from-above { animation: roll-down 200ms var(--ease) backwards; }
+@keyframes roll-up { from { opacity: 0; transform: translateY(5px); filter: blur(1.5px); } }
+@keyframes roll-down { from { opacity: 0; transform: translateY(-5px); filter: blur(1.5px); } }
+.speed-btn { height: 32px; min-width: 44px; padding: 0 8px; border-radius: var(--pill); font-size: 13.5px; font-weight: 550; color: var(--ink); font-variant-numeric: tabular-nums; flex: none; transition: background-color 160ms var(--ease), transform 140ms var(--ease); }
+.speed-btn:active { transform: scale(0.94); }
+@media (hover: hover) and (pointer: fine) { .speed-btn:hover { background: var(--container-2); } }
+.live-btn {
+  display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: var(--pill); background: var(--tint-red); color: var(--ink); font-size: 13.5px; font-weight: 550; white-space: nowrap;
+  flex: none; max-width: 200px; overflow: hidden;
+  transition: max-width 300ms var(--ease), padding 300ms var(--ease), margin 300ms var(--ease), opacity 200ms var(--ease), transform 140ms var(--ease), visibility 0s;
+}
+.live-btn:active { transform: scale(0.96); }
+/* Not needed right now: it folds away, and the line takes the room without a jump. */
+.live-btn.is-off {
+  max-width: 0; padding-left: 0; padding-right: 0; margin-left: calc(var(--gap) * -1); opacity: 0; visibility: hidden;
+  transition: max-width 300ms var(--ease), padding 300ms var(--ease), margin 300ms var(--ease), opacity 160ms var(--ease), visibility 0s 300ms;
+}
 
 /* ---------- story ---------- */
 .story { position: absolute; inset: 0; overflow-y: auto; background: var(--bg); padding: 48px 20px 240px; outline: none; scroll-padding: 90px 0 200px; }
 .story-list, .story-empty { max-width: 680px; margin: 0 auto; }
+.story-list { position: relative; }
+/* The current step: one soft block that slides from step to step (placed by story.js). */
+.st-marker {
+  position: absolute; left: -14px; right: -14px; top: 0; height: 0; border-radius: var(--r-md); background: var(--container); pointer-events: none;
+  transition: transform 420ms var(--ease), height 420ms var(--ease), opacity 200ms var(--ease);
+}
+.st-marker.is-off { opacity: 0; }
 .story-empty { color: var(--ink-2); font-size: 20px; padding-top: 12vh; text-align: center; }
 .st {
-  display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 16px; padding: 16px 14px; margin: 0 -14px; border-radius: var(--r-md);
-  transition: opacity 300ms var(--ease), background-color 300ms var(--ease);
+  position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 16px; padding: 16px 14px; margin: 0 -14px; border-radius: var(--r-md);
+  transition: opacity 300ms var(--ease);
   animation: st-in 420ms var(--ease) backwards; animation-delay: calc(var(--i, 0) * 24ms);
 }
 @keyframes st-in { from { opacity: 0; transform: translateY(8px); } }
 .st.is-future { opacity: 0.36; }
-.st.is-current { background: var(--container); }
 .st-ico { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--container-2); color: var(--ink-2); transition: background-color 300ms var(--ease), color 300ms var(--ease); }
 .st.is-current .st-ico { background: var(--ink); color: var(--bg); }
 .tone-tool .st-ico, .tone-tool_result .st-ico { color: var(--green); background: var(--tint-green); }
@@ -730,7 +798,7 @@ b { font-weight: 600; }
 @keyframes drift { from { transform: translateX(-58%) scale(1); } to { transform: translateX(-42%) scale(1.12); } }
 .empty-title { font-size: clamp(34px, 5.4vw, 54px); line-height: 1.04; letter-spacing: -0.02em; font-weight: 450; max-width: 16ch; }
 .empty-lead { margin-top: 18px; font-size: clamp(16px, 1.6vw, 20px); color: var(--ink-2); max-width: 54ch; }
-.how-list { margin-top: clamp(28px, 6vh, 56px); display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 22px; width: min(860px, 100%); text-align: left; }
+.how-list { margin-top: clamp(28px, 6vh, 56px); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 22px; width: min(960px, 100%); text-align: left; }
 .how {
   position: relative; background: var(--paper); color: var(--paper-ink); padding: 18px 18px 20px; border-radius: 3px 3px 22px 3px; min-height: 172px;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.06), 0 16px 24px -14px rgba(0, 0, 0, 0.3);
@@ -742,9 +810,11 @@ b { font-weight: 600; }
 .how-n { font-family: var(--hand); font-size: 30px; font-weight: 700; line-height: 1; opacity: 0.5; }
 .how h3 { font-family: var(--hand); font-size: 20px; font-weight: 650; margin-top: 6px; }
 .how p { font-family: var(--hand); font-size: 15px; margin-top: 4px; }
-.cmd { margin-top: 12px; display: inline-flex; align-items: center; gap: 10px; height: 36px; padding: 0 14px; border-radius: var(--pill); background: #121317; color: #f8f9fc; transition: transform 140ms var(--ease); }
+.how .how-alt { margin-top: 12px; }
+.how .how-alt + .cmd { margin-top: 6px; }
+.cmd { margin-top: 12px; display: inline-flex; align-items: center; gap: 8px; min-height: 36px; max-width: 100%; padding: 0 12px; border-radius: var(--pill); background: #121317; color: #f8f9fc; transition: transform 140ms var(--ease); }
 .cmd:active { transform: scale(0.97); }
-.cmd code { font-family: var(--mono); font-size: 13.5px; }
+.cmd code { font-family: var(--mono); font-size: 13px; }
 .empty-wait { margin-top: 36px; display: inline-flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 14.5px; }
 body.is-empty .stage { opacity: 0.5; }
 body.is-empty .dock, body.is-empty .palette, body.is-empty .zoom { display: none; }
@@ -786,9 +856,9 @@ body.is-empty .dock, body.is-empty .palette, body.is-empty .zoom { display: none
   .zoom { right: 8px; bottom: auto; top: 68px; flex-direction: column; }
   .dock { bottom: 8px; width: calc(100% - 16px); gap: 8px; }
   .cap-line { font-size: 17px; }
-  .player { padding: 5px 8px 5px 6px; gap: 0; }
+  .player { padding: 5px 8px 5px 6px; --gap: 0px; }
   .count { display: none; }
-  .scrub { margin: 0 6px; }
+  .scrub-wrap { margin: 0 6px; }
   .panel { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; max-width: none; max-height: 72%; animation-name: sheet-in; }
   @keyframes sheet-in { from { opacity: 0; transform: translateY(24px); } }
   .story { padding: 24px 16px 220px; }

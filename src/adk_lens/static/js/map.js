@@ -28,6 +28,11 @@ export function createMap(stage, opts) {
   let userFitted = false;
   let travelRaf = 0;
   let lastFrameKey = '';
+  // The token that carries the request: one element for the whole request, moved with transform.
+  const token = s('g', { class: 'token is-off' }, s('circle', { r: 15, class: 'dot-halo' }), s('circle', { r: 8, class: 'dot' }));
+  let tokenAt = null; // where it is, in map coordinates
+  let tokenOn = false;
+  let ghost = null; // the dotted path of a journey that has no drawn connector
   let activeId = null;
   const viewListeners = [];
 
@@ -115,9 +120,16 @@ export function createMap(stage, opts) {
     topo = next;
     const diff = o.diff || null;
     lay = layout(topo);
+    cancelAnimationFrame(travelRaf);
+    travelRaf = 0;
     clear(edgeSvg); clear(nodeLayer); clear(labelLayer); clear(travelSvg);
     nodeEls.clear(); edgeEls.clear();
     lastFrameKey = '';
+    ghost = null;
+    tokenAt = null;
+    tokenOn = false;
+    token.classList.add('is-off');
+    put(travelSvg, token);
     const W = lay.width, H = lay.height;
     for (const svg of [edgeSvg, notesSvg, travelSvg]) {
       svg.setAttribute('width', W); svg.setAttribute('height', H);
@@ -239,9 +251,7 @@ export function createMap(stage, opts) {
     const key = frame.step ? frame.step.id : '';
     const changed = key !== lastFrameKey;
     lastFrameKey = key;
-    cancelAnimationFrame(travelRaf);
-    clear(travelSvg);
-    if (!hasRun) return;
+    if (!hasRun) { stopTravel(); hideToken(); return; }
     if (frame.active && nodeEls.has(frame.active) && changed) {
       const el = nodeEls.get(frame.active);
       if (frame.kind === 'tool' || frame.kind === 'tool_result' || frame.kind === 'answer') {
@@ -251,41 +261,85 @@ export function createMap(stage, opts) {
       }
       if (o.follow !== false) ensureVisible(frame.active);
     }
+    // The same step drawn again (a live request refreshes at every event): the journey under way goes on.
+    if (!changed) return;
+    stopTravel();
     if (frame.travel) runTravel(frame.travel, frame.kind, changed && o.animate !== false, o.duration || 700);
+    else { dropGhost(); hideToken(); }
+  }
+
+  function stopTravel() {
+    cancelAnimationFrame(travelRaf);
+    travelRaf = 0;
+    token.classList.remove('is-hop');
+  }
+
+  function hideToken() {
+    tokenOn = false;
+    token.classList.add('is-off');
+  }
+
+  function placeToken(x, y) {
+    tokenAt = { x, y };
+    token.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+  }
+
+  // The dotted path fades away instead of vanishing.
+  function dropGhost() {
+    const old = ghost;
+    ghost = null;
+    if (!old) return;
+    if (reducedMotion()) { old.remove(); return; }
+    old.classList.add('is-out');
+    setTimeout(() => old.remove(), 240);
   }
 
   function runTravel(tr, kind, animate, duration) {
     const found = findEdge(tr.from, tr.to);
     let path, reverse = false;
+    dropGhost();
     if (found) {
       path = found.path; reverse = found.reverse;
     } else {
       const a = lay.boxes.get(tr.from), b = lay.boxes.get(tr.to);
-      if (!a || !b) return;
+      if (!a || !b) { hideToken(); return; }
       path = s('path', { d: freePath(a, b), class: 'ghost-line' });
-      put(travelSvg, path);
+      travelSvg.insertBefore(path, token);
+      ghost = path;
     }
     const len = path.getTotalLength();
-    const dot = s('circle', { r: 8, class: `dot tone-${kind}` });
-    const halo = s('circle', { r: 15, class: `dot-halo tone-${kind}` });
-    put(travelSvg, halo, dot);
-    const at = (p) => {
-      const pt = path.getPointAtLength(reverse ? len * (1 - p) : len * p);
-      dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y);
-      halo.setAttribute('cx', pt.x); halo.setAttribute('cy', pt.y);
-    };
+    const pt = (p) => path.getPointAtLength(reverse ? len * (1 - p) : len * p);
+    token.lastChild.setAttribute('class', `dot tone-${kind}`);
+    token.firstChild.setAttribute('class', `dot-halo tone-${kind}`);
+    const wasOn = tokenOn && !!tokenAt;
     if (!animate || reducedMotion()) {
-      at(1);
+      const e = pt(1);
+      placeToken(e.x, e.y);
+      tokenOn = true;
+      token.classList.remove('is-off');
       return;
     }
+    // It leaves from where it is: when the last journey ended next to this one, it joins the new path in a curve.
+    // When it ended far away (the answer went back to the person), it fades there and comes back here:
+    // no dash across the whole map, and never a blink.
+    const a = pt(0);
+    let off = wasOn ? { x: tokenAt.x - a.x, y: tokenAt.y - a.y } : { x: 0, y: 0 };
+    const hop = Math.hypot(off.x, off.y) > 150 ? Math.min(150, duration * 0.25) : 0;
+    if (hop) { token.classList.add('is-hop'); off = { x: 0, y: 0 }; } else if (!wasOn) placeToken(a.x, a.y);
+    tokenOn = true;
+    token.classList.remove('is-off');
     const start = performance.now();
     const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
     const tick = (now) => {
-      const p = Math.min(1, (now - start) / duration);
-      at(ease(p));
-      if (p < 1) travelRaf = requestAnimationFrame(tick);
+      const el = now - start;
+      if (el < hop) { travelRaf = requestAnimationFrame(tick); return; }
+      token.classList.remove('is-hop');
+      const p = Math.max(0, Math.min(1, (el - hop) / (duration - hop)));
+      const q = pt(ease(p));
+      const k = Math.pow(1 - Math.min(1, p * 2.2), 3); // how much of the old place is left
+      placeToken(q.x + off.x * k, q.y + off.y * k);
+      travelRaf = p < 1 ? requestAnimationFrame(tick) : 0;
     };
-    at(0);
     travelRaf = requestAnimationFrame(tick);
   }
 

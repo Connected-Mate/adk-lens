@@ -10,6 +10,7 @@ import { createMap } from './map.js';
 import { createStory, sentence, sentenceText } from './story.js';
 import { createNotes, STAMPS } from './notes.js';
 import { buildPrompt, copyText } from './prompt.js';
+import { createScrub, createCaption, swapText } from './motion.js';
 
 const params = new URLSearchParams(location.search);
 const HEAD = { 'X-ADK-Lens': '1', 'Content-Type': 'application/json' };
@@ -27,6 +28,9 @@ const ui = {
 const el = {};
 let map, story, notes;
 let playTimer = 0;
+let seg = null; // the step being played: { t0, ms, from } (from = part of the step already shown)
+let held = 0; // part of the current step already shown when it was paused
+let scrub, caption;
 let mapKey = '';
 let pop = null;
 let es = null;
@@ -116,22 +120,28 @@ function buildShell() {
   // Player.
   el.caption = h('div', { class: 'caption', 'aria-live': 'polite' });
   el.prev = btn('icon-btn', t('player.prev'), [icon('prev', 20)], () => step(-1));
-  el.play = btn('play-btn', t('player.play'), [icon('play', 22)], () => togglePlay());
+  el.play = btn('play-btn', t('player.play'), [h('span', { class: 'play-ico' }, icon('play', 22), icon('pause', 22))], () => togglePlay());
   el.next = btn('icon-btn', t('player.next'), [icon('next', 20)], () => step(1));
   el.scrub = h('input', { class: 'scrub', type: 'range', min: '0', max: '0', step: '1', value: '0', 'aria-label': t('player.scrub') });
   el.scrub.addEventListener('input', () => {
     pause();
     ui.follow = false;
-    setIdx(Number(el.scrub.value), { animate: false });
+    setIdx(Number(el.scrub.value), { animate: false, scrub: true });
   });
-  el.count = h('span', { class: 'count', 'aria-hidden': 'true' });
+  scrub = createScrub(el.scrub, progressAt);
+  caption = createCaption(el.caption);
+  // "3 / 12": each figure keeps its own place, so nothing shifts when one changes.
+  const [c0, c1, c2] = t('player.count', { i: '\u0001', n: '\u0001' }).split('\u0001');
+  el.countI = h('span', { class: 'count-i' });
+  el.countN = h('span', { class: 'count-n' });
+  el.count = h('span', { class: 'count', 'aria-hidden': 'true' }, c0, el.countI, c1, el.countN, c2);
   el.speed = btn('speed-btn', '', [], () => {
     ui.speed = SPEEDS[(SPEEDS.indexOf(ui.speed) + 1) % SPEEDS.length];
     renderPlayer();
     schedule();
   }, { noTitle: true });
-  el.liveBtn = btn('live-btn', t('player.live'), [h('span', { class: 'live-dot' }), h('span', { text: t('player.live') })], () => followLive(), { noTitle: true });
-  el.player = h('div', { class: 'player', role: 'group', 'aria-label': t('player.label') }, el.prev, el.play, el.next, el.scrub, el.count, el.speed, el.liveBtn);
+  el.liveBtn = btn('live-btn is-off', t('player.live'), [h('span', { class: 'live-dot' }), h('span', { text: t('player.live') })], () => followLive(), { noTitle: true });
+  el.player = h('div', { class: 'player', role: 'group', 'aria-label': t('player.label') }, el.prev, el.play, el.next, scrub.el, el.count, el.speed, el.liveBtn);
   el.dock = h('div', { class: 'dock', hidden: true }, el.caption, el.player);
 
   el.panel = h('aside', { class: 'panel', hidden: true, tabindex: '-1' });
@@ -193,6 +203,16 @@ function buildShell() {
 
 const currentRun = () => (ui.runId ? store.runs.get(ui.runId) : null);
 const versionsOf = (app) => store.versions[app] || [];
+// The apps worth choosing: after "clear", an app with no request left and not seen since is not offered any more
+// (the one on screen always stays).
+function appsShown() {
+  const has = new Set([...store.runs.values()].map((r) => r.app));
+  return Object.keys(store.apps).filter((app) => {
+    if (app === ui.app || has.has(app) || !store.clearedAt) return true;
+    const ver = currentVersion(app);
+    return !!ver && Math.max(ver.seen || 0, ver.ts || 0) >= store.clearedAt;
+  });
+}
 const latestVersion = (app) => currentVersion(app);
 
 function shownVersion() {
@@ -274,9 +294,8 @@ function promptText() {
 // ---------------------------------------------------------------- rendering
 
 function renderAll(o = {}) {
-  const apps = Object.keys(store.apps);
   if (!ui.app || !store.apps[ui.app]) {
-    ui.app = apps[0] || null;
+    ui.app = appsShown()[0] || Object.keys(store.apps)[0] || null;
     const latest = [...store.runs.values()].sort((a, b) => b.startTs - a.startTs)[0];
     if (latest && store.apps[latest.app]) ui.app = latest.app;
     ui.runId = null;
@@ -347,20 +366,21 @@ function renderEmpty(show) {
     }, { noTitle: true });
     return b;
   };
-  const card = (n, cls, title, body, command) => h('li', { class: `how ${cls}`, style: { '--i': String(n) } },
-    h('span', { class: 'how-n', 'aria-hidden': 'true', text: String(n) }), h('h3', { text: title }), h('p', { text: body }), command ? cmd(command) : null);
+  const card = (n, cls, title, body, command, alt) => h('li', { class: `how ${cls}`, style: { '--i': String(n) } },
+    h('span', { class: 'how-n', 'aria-hidden': 'true', text: String(n) }), h('h3', { text: title }), h('p', { text: body }), command ? cmd(command) : null,
+    alt ? [h('p', { class: 'how-alt', text: alt[0] }), cmd(alt[1])] : null);
   put(el.empty, 
     h('h1', { class: 'empty-title', text: t('empty.title') }),
     h('p', { class: 'empty-lead', text: t('empty.lead') }),
     h('ol', { class: 'how-list' },
       card(1, 'kind-comment', t('empty.s1.t'), t('empty.s1.b'), 'adk-lens demo'),
-      card(2, 'kind-question', t('empty.s2.t'), t('empty.s2.b'), 'adk-lens web'),
+      card(2, 'kind-question', t('empty.s2.t'), t('empty.s2.b'), 'adk-lens web', [t('empty.s2.c'), 'adk-lens python script.py']),
       card(3, 'kind-idea', t('empty.s3.t'), t('empty.s3.b'))),
     h('p', { class: 'empty-wait' }, h('span', { class: 'live-dot' }), h('span', { text: t('empty.wait') })));
 }
 
 function renderTop() {
-  const apps = Object.keys(store.apps);
+  const apps = appsShown();
   clear(el.appBtn);
   el.appBtn.hidden = !ui.app;
   if (ui.app) {
@@ -452,32 +472,36 @@ function renderRun(o = {}) {
   el.story.hidden = ui.view !== 'linear' || !ui.app;
   el.dock.classList.toggle('in-story', ui.view === 'linear');
   story.update(run, ui.idx, { instant: o.instant, notes: o.notes, force: o.force });
-  renderPlayer();
+  renderPlayer(o);
   el.stage.classList.toggle('is-behind', ui.view !== 'journey');
   el.stage.inert = ui.view !== 'journey';
 }
 
-function renderPlayer() {
+function renderPlayer(o = {}) {
   const run = currentRun();
   const steps = run ? stepsOf(run) : [];
   const runs = ui.app ? runsOf(ui.app) : [];
   el.dock.hidden = !ui.app || ui.compare !== null;
   el.dock.classList.toggle('no-run', !run);
-  clear(el.caption);
   if (!run) {
-    if (ui.app) put(el.caption, h('span', { class: 'cap-line', text: runs.length ? t('story.empty') : t('norun.title') }), h('span', { class: 'cap-body', text: runs.length ? '' : t('norun.body', { app: ui.app }) }));
+    const title = runs.length ? t('story.empty') : t('norun.title');
+    const body = runs.length ? '' : t('norun.body', { app: ui.app || '' });
+    delete el.caption.dataset.tone;
+    caption.set(ui.app ? ['norun', getLang(), title, body].join('\u0001') : '', () => (ui.app ? [h('span', { class: 'cap-line', text: title }), body ? h('span', { class: 'cap-body', text: body }) : null] : null), { instant: true });
+    scrub.sync();
     return;
   }
   const st = steps[ui.idx];
-  if (st) {
-    const sn = sentence(st);
-    el.caption.dataset.tone = st.kind;
-    put(el.caption, h('span', { class: 'cap-line' }, tn(sn.key, sn.vars)), sn.body ? h('span', { class: 'cap-body', text: short(sn.body, 220) }) : null);
-  }
+  const sn = st ? sentence(st) : null;
+  if (st) el.caption.dataset.tone = st.kind;
+  // The same sentence is left alone (a live request re-renders at every event): only a new one swaps in.
+  const capKey = st ? [getLang(), run.id, st.id, t(sn.key, sn.vars), sn.body ? short(sn.body, 220) : ''].join('\u0001') : `none:${run.id}`;
+  const back = renderPlayer.run === run.id && ui.idx < renderPlayer.idx;
+  caption.set(capKey, () => (st ? [h('span', { class: 'cap-line' }, tn(sn.key, sn.vars)), sn.body ? h('span', { class: 'cap-body', text: short(sn.body, 220) }) : null] : null),
+    { tone: st ? st.kind : '', instant: !!o.scrub, back });
   const atEnd = ui.idx >= steps.length - 1;
   const waiting = ui.playing && atEnd && run.status === 'live';
-  clear(el.play);
-  put(el.play, icon(ui.playing ? 'pause' : 'play', 22));
+  el.play.classList.toggle('is-playing', ui.playing);
   const playLabel = ui.playing ? t('player.pause') : atEnd && run.status !== 'live' ? t('player.replay') : t('player.play');
   el.play.setAttribute('aria-label', playLabel);
   el.play.title = playLabel;
@@ -486,14 +510,36 @@ function renderPlayer() {
   el.next.disabled = atEnd;
   el.scrub.max = String(Math.max(0, steps.length - 1));
   el.scrub.value = String(ui.idx);
-  el.scrub.style.setProperty('--p', steps.length > 1 ? `${(ui.idx / (steps.length - 1)) * 100}%` : '100%');
   el.scrub.setAttribute('aria-valuetext', st ? `${t('story.step', { i: ui.idx + 1 })}: ${sentenceText(st)}` : '');
-  el.count.textContent = t('player.count', { i: steps.length ? ui.idx + 1 : 0, n: steps.length });
-  el.speed.textContent = `${ui.speed}×`;
+  scrub.sync();
+  const digits = String(steps.length).length;
+  if (el.count.dataset.digits !== String(digits)) {
+    el.count.dataset.digits = String(digits);
+    el.count.style.setProperty('--digits', String(digits));
+  }
+  swapText(el.countI, steps.length ? ui.idx + 1 : 0, { dir: back ? -1 : 1, instant: !!o.scrub || renderPlayer.run !== run.id });
+  swapText(el.countN, steps.length, { instant: renderPlayer.run !== run.id });
+  swapText(el.speed, `${ui.speed}×`);
   el.speed.setAttribute('aria-label', t('player.speed', { s: ui.speed }));
   const liveRun = runs.find((r) => r.status === 'live');
-  el.liveBtn.hidden = ui.follow || !(liveRun || (runs[0] && runs[0].id !== ui.runId));
+  el.liveBtn.classList.toggle('is-off', ui.follow || !(liveRun || (runs[0] && runs[0].id !== ui.runId)));
   el.player.classList.toggle('is-live', run.status === 'live');
+  renderPlayer.run = run.id;
+  renderPlayer.idx = ui.idx;
+}
+
+// Where the request is right now, for the progress line: between two steps while it plays.
+function stepPart(now = performance.now()) {
+  if (seg) return Math.min(1, seg.from + (1 - seg.from) * Math.max(0, (now - seg.t0) / seg.ms));
+  return held;
+}
+
+function progressAt(now) {
+  const run = currentRun();
+  const n = run ? stepsOf(run).length : 0;
+  const last = Math.max(0, n - 1);
+  const pos = Math.min(last, ui.idx + (reducedMotion() ? 0 : stepPart(now)));
+  return { pos, last, moving: ui.playing && !!seg, tail: ui.playing && !!run && run.status === 'live' && ui.idx >= last - 1 };
 }
 
 function refreshNotesViews() {
@@ -510,18 +556,24 @@ function setIdx(i, o = {}) {
   if (!run) return;
   const steps = stepsOf(run);
   ui.idx = Math.max(0, Math.min(i, steps.length - 1));
+  seg = null;
+  held = 0;
   renderRun(o);
   if (ui.panel && ui.panel.type === 'node') renderPanel();
 }
 
 function schedule() {
+  // Called again in the middle of a step (another speed, a live event): the step goes on from where it is.
+  const from = Math.min(0.98, stepPart());
   clearTimeout(playTimer);
   playTimer = 0;
+  seg = null;
   if (!ui.playing) return;
   const run = currentRun();
   if (!run) { ui.playing = false; return; }
   const steps = stepsOf(run);
   if (ui.idx >= steps.length - 1) {
+    held = 0;
     const next = ui.follow ? nextRunAfter(run) : null;
     // Still live: wait for its next event, unless it went silent and another request started.
     if (run.status === 'live' && !(next && next.startTs > (run.lastTs || 0) + 5)) { renderPlayer(); return; }
@@ -537,11 +589,15 @@ function schedule() {
   const cur = steps[ui.idx];
   let delay = (cur && (cur.kind === 'answer' || cur.kind === 'ask') ? 1500 : 1050) / ui.speed;
   if (run.status === 'live' && ui.follow && behind > 3) delay = Math.min(delay, 420);
+  held = 0;
+  seg = { t0: performance.now(), ms: Math.max(1, delay * (1 - from)), from };
   playTimer = setTimeout(() => {
     playTimer = 0;
+    seg = null;
     setIdx(ui.idx + 1);
     schedule();
-  }, delay);
+  }, seg.ms);
+  scrub.sync();
 }
 
 // When following, requests are shown one after the other, never cut short.
@@ -569,12 +625,15 @@ function play() {
 function pause() {
   if (!ui.playing) return;
   ui.playing = false;
+  held = stepPart(); // the line stays where it is; Play goes on from there
+  seg = null;
   clearTimeout(playTimer);
+  playTimer = 0;
   renderPlayer();
 }
 
 function togglePlay() {
-  if (ui.playing) { pause(); ui.follow = false; } else play();
+  if (ui.playing) { ui.follow = false; pause(); } else play(); // follow first: the bar is drawn once, with "Follow live" in it
 }
 
 function step(d) {
@@ -587,6 +646,9 @@ function selectRun(id, o = {}) {
   const run = store.runs.get(id);
   if (!run) return;
   clearTimeout(playTimer);
+  playTimer = 0;
+  seg = null;
+  held = 0;
   if (run.app !== ui.app) { ui.app = run.app; ui.version = null; ui.compare = null; }
   ui.runId = id;
   const steps = stepsOf(run);
@@ -682,7 +744,7 @@ function openMarks(anchor) {
 function openApps(anchor) {
   openPop(anchor, (node) => {
     put(node, h('h2', { class: 'pop-title', text: t('top.apps') }));
-    for (const app of Object.keys(store.apps)) {
+    for (const app of appsShown()) {
       const runs = runsOf(app);
       const live = runs.some((r) => r.status === 'live');
       put(node, popItem([
@@ -808,6 +870,7 @@ function openMore(anchor) {
       if (!window.confirm(t('menu.clear.confirm'))) return;
       fetch('/api/clear', { method: 'POST', headers: HEAD }).then(() => {
         store.runs = new Map();
+        store.clearedAt = store.clearedAt || Date.now() / 1000;
         ui.runId = null;
         renderAll();
       }).catch(() => {});
@@ -1064,7 +1127,7 @@ function onRunsTouched(ids) {
   }
   if (ui.follow && ui.playing && cur && cur.status === 'live' && ui.idx >= stepsOf(cur).length - 1 && !playTimer) schedule();
   if (cur && ids.includes(cur.id)) {
-    renderRun({ instant: true });
+    renderRun(); // same step: nothing restarts; a new step glides in
     if (ui.playing) { if (ui.idx >= stepsOf(cur).length - 2 || !playTimer) schedule(); }
     if (ui.panel && ui.panel.type === 'node') renderPanel();
   }

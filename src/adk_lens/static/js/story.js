@@ -127,6 +127,30 @@ export function createStory(root, opts) {
   let count = 0;
   let langAt = '';
   const rows = [];
+  // The block behind the current step. One element that slides, so the eye follows it from step to step.
+  const marker = h('li', { class: 'st-marker is-off', role: 'presentation', 'aria-hidden': 'true' });
+  let markerOn = false;
+  let current = -1;
+  let scrollGoal = null; // where a smooth scroll is already heading
+  let scrollAt = 0;
+
+  function placeMarker(glide) {
+    const r = rows[current];
+    if (!r || root.hidden) {
+      markerOn = false;
+      marker.classList.add('is-off');
+      return;
+    }
+    const jump = !glide || !markerOn;
+    if (jump) marker.style.transition = 'none';
+    marker.style.transform = `translateY(${r.li.offsetTop}px)`;
+    marker.style.height = `${r.li.offsetHeight}px`;
+    marker.classList.remove('is-off');
+    if (jump) { void marker.offsetHeight; marker.style.transition = ''; }
+    markerOn = true;
+  }
+  // A step that opens its details or gets a comment changes height: the block follows.
+  new ResizeObserver(() => placeMarker(true)).observe(list);
 
   function row(step, i) {
     const sn = sentence(step);
@@ -161,6 +185,8 @@ export function createStory(root, opts) {
     const rebuild = o.force || !run || run.id !== runId || steps.length < count || langAt !== document.documentElement.lang;
     if (rebuild) {
       clear(list);
+      put(list, marker);
+      markerOn = false;
       rows.length = 0;
       count = 0;
       runId = run ? run.id : null;
@@ -186,11 +212,21 @@ export function createStory(root, opts) {
       if (i === idx) r.li.setAttribute('aria-current', 'step'); else r.li.removeAttribute('aria-current');
     });
     if (rebuild || grew || o.notes) for (const r of rows) opts.fillNotes(r.notes, runId, r.step);
+    current = idx;
+    placeMarker(!o.instant && !rebuild);
     if (o.scroll !== false && rows[idx] && !root.hidden) {
       const el = rows[idx].li;
       const rr = root.getBoundingClientRect(), er = el.getBoundingClientRect();
       if (er.top < rr.top + 90 || er.bottom > rr.bottom - 190) {
-        root.scrollTo({ top: root.scrollTop + er.top - rr.top - rr.height * 0.35, behavior: o.instant ? 'auto' : 'smooth' });
+        const top = Math.max(0, Math.round(root.scrollTop + er.top - rr.top - rr.height * 0.35));
+        const now = performance.now();
+        // Already gliding there (the same step drawn again): asking again would restart the glide, or cut it short.
+        const under = scrollGoal !== null && Math.abs(top - scrollGoal) < 6 && now - scrollAt < 900;
+        if (!under) {
+          scrollGoal = o.instant ? null : top;
+          scrollAt = now;
+          root.scrollTo({ top, behavior: o.instant ? 'auto' : 'smooth' });
+        }
       }
     }
   }

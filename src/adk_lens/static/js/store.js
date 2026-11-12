@@ -12,6 +12,7 @@ export const store = {
   runs: new Map(), // run id -> run
   lastSeq: 0,
   stale: false,    // true when we show an old recording after a hub restart
+  clearedAt: 0,    // when the requests were last cleared (seconds)
   hubNotes: null,
 };
 
@@ -54,6 +55,7 @@ export function resetStore() {
   store.runs = new Map();
   store.lastSeq = 0;
   store.stale = false;
+  store.clearedAt = 0; // when the requests were last cleared (seconds), 0 = never
 }
 
 export function loadState(state) {
@@ -102,6 +104,7 @@ export function ingest(ev, bulk = false) {
   if (type === 'cleared') {
     store.runs = new Map();
     store.events = [];
+    store.clearedAt = Number(ev.ts) || Date.now() / 1000;
     return { cleared: true };
   }
   if (type === 'topology') {

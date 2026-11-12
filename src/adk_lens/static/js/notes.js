@@ -202,6 +202,12 @@ export function createNotes(map, stage, opts) {
     });
     el.style.left = `${p.x}px`;
     el.style.top = `${p.y}px`;
+    if (item.type === 'stamp' && item.target && item.text) {
+      // Its word would run past the right edge of the map (and of the screen): it goes to the left of the mark.
+      let edge = 0;
+      for (const b of map.boxes().values()) edge = Math.max(edge, b.x + b.w);
+      if (p.x + 44 + Math.min(220, item.text.length * 8 + 20) > edge + 24) el.classList.add('is-flipped');
+    }
     el.style.setProperty('--tilt', `${((item.id.charCodeAt(item.id.length - 1) % 5) - 2) * 0.8}deg`);
     if (item.type === 'sticky') {
       put(el, h('div', { class: 'note-grip', 'aria-hidden': 'true' },
