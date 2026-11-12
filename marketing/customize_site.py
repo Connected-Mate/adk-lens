@@ -27,22 +27,25 @@ e = html.escape
 T = {
     "en": {
         "skip": "Skip to content", "home": "home", "nav_label": "Sections", "lang_label": "Version française", "lang_short": "FR",
-        "nav": [("#features", "What it does"), ("#agent", "Set up"), ("#faq", "Questions")],
+        "nav": [("#try", "Try it"), ("#features", "What it does"), ("#agent", "Set up"), ("#faq", "Questions")],
+        "try_title": "Try it right here", "try_text": "Pick a request and watch it travel through the agents. Nothing to install.",
         "copy": "Copy the setup prompt", "copy_short": "Copy the prompt", "copied": "Prompt copied", "copied_live": "Prompt copied. Paste it into your coding agent.",
         "works": "Works with Claude Code, Codex, Antigravity and Gemini CLI, Cursor, GitHub Copilot, Windsurf, or any coding agent.",
         "any": "any agent",
         "prompt": "Plan my weekend", "you": "YOUR PROMPT", "agent": "AGENTS", "tool": "TOOL",
         "sticky": ["Why the weather", "first?"],
         "board_label": "Illustration: a prompt travels from one agent to the next on a dotted whiteboard, next to one sticky note.",
-        "caption": "Illustration. The real board draws your own agents.",
+        "caption": "Site demo, with the agents of the bundled example. The real board draws yours.",
         "statement": "ADK Lens plugs on top of ADK and draws what your agents do, live. Nothing to change in your agent code.",
         "story": ["You ask for a weekend plan.", "concierge hands over to weather_agent.", "weather_agent calls get_weather.", "planner writes the answer."],
         "note": "Why the weather first?", "as_prompt": "Copy as prompt",
-        "shots_title": "The real thing",
+        "shots_title": "The real thing", "shots_tabs": "Screenshots",
+        "copy_fail": "Your browser blocked the copy.", "copy_fail_link": "Open the setup guide",
+        "manual": "No coding agent? Do it by hand", "manual_copy": "Copy the two commands", "manual_copied": "Commands copied", "manual_live": "Commands copied. Paste them into your terminal.",
         "shots": [
-            ("shot-map.png", "ADK Lens screenshot: the map of agents and tools.", "The map of your agents and tools."),
-            ("shot-linear.png", "ADK Lens screenshot: the Linear view of a run.", "A run, told in plain words."),
-            ("shot-notes.png", "ADK Lens screenshot: notes on the board.", "Your notes, ready to copy as a prompt."),
+            ("shot-map.png", "ADK Lens screenshot: the map of agents and tools.", "The map of your agents and tools.", "The map"),
+            ("shot-linear.png", "ADK Lens screenshot: the Story view of a run.", "A run, told in plain words.", "The story"),
+            ("shot-notes.png", "ADK Lens screenshot: notes on the board.", "Your notes, ready to copy as a prompt.", "The notes"),
         ],
         "setup_title": "Set it up with your coding agent",
         "setup_text": "Copy the prompt and paste it into your coding agent, in your project folder. It finds your ADK project and puts ADK Lens on top. No ADK project yet? It offers to create your first agent.",
@@ -59,22 +62,25 @@ T = {
     },
     "fr": {
         "skip": "Aller au contenu", "home": "accueil", "nav_label": "Sections", "lang_label": "English version", "lang_short": "EN",
-        "nav": [("#features", "Ce que ça fait"), ("#agent", "Installer"), ("#faq", "Questions")],
+        "nav": [("#try", "Essayer"), ("#features", "Ce que ça fait"), ("#agent", "Installer"), ("#faq", "Questions")],
+        "try_title": "Essaie-le ici", "try_text": "Choisis une demande et regarde-la traverser les agents. Rien à installer.",
         "copy": "Copier le prompt d'installation", "copy_short": "Copier le prompt", "copied": "Prompt copié", "copied_live": "Prompt copié. Colle-le dans ton agent de code.",
         "works": "Fonctionne avec Claude Code, Codex, Antigravity et Gemini CLI, Cursor, GitHub Copilot, Windsurf, ou n'importe quel agent de code.",
         "any": "n'importe quel agent",
         "prompt": "Prépare mon week-end", "you": "TON PROMPT", "agent": "AGENTS", "tool": "OUTIL",
         "sticky": ["Pourquoi la météo", "d'abord ?"],
         "board_label": "Illustration : un prompt passe d'un agent à l'autre sur un tableau blanc pointillé, à côté d'un post-it.",
-        "caption": "Illustration. Le vrai tableau dessine tes propres agents.",
+        "caption": "Démo du site, avec les agents de l'exemple fourni. Le vrai tableau dessine les tiens.",
         "statement": "ADK Lens se branche sur ADK et dessine en direct ce que font tes agents. Rien à changer dans ton code.",
         "story": ["Tu demandes un programme de week-end.", "concierge passe la main à weather_agent.", "weather_agent appelle get_weather.", "planner rédige la réponse."],
         "note": "Pourquoi la météo d'abord ?", "as_prompt": "Copier comme prompt",
-        "shots_title": "En vrai",
+        "shots_title": "En vrai", "shots_tabs": "Captures d'écran",
+        "copy_fail": "Ton navigateur a bloqué la copie.", "copy_fail_link": "Ouvrir le guide d'installation",
+        "manual": "Pas d'agent de code ? Fais-le à la main", "manual_copy": "Copier les deux commandes", "manual_copied": "Commandes copiées", "manual_live": "Commandes copiées. Colle-les dans ton terminal.",
         "shots": [
-            ("shot-map.png", "Capture d'ADK Lens : la carte des agents et des outils.", "La carte de tes agents et de tes outils."),
-            ("shot-linear.png", "Capture d'ADK Lens : la vue linéaire d'une exécution.", "Une exécution, racontée en mots simples."),
-            ("shot-notes.png", "Capture d'ADK Lens : des notes sur le tableau.", "Tes notes, prêtes à copier comme prompt."),
+            ("shot-map.png", "Capture d'ADK Lens : la carte des agents et des outils.", "La carte de tes agents et de tes outils.", "La carte"),
+            ("shot-linear.png", "Capture d'ADK Lens : la vue Récit d'une exécution.", "Une exécution, racontée en mots simples.", "Le récit"),
+            ("shot-notes.png", "Capture d'ADK Lens : des notes sur le tableau.", "Tes notes, prêtes à copier comme prompt.", "Les notes"),
         ],
         "setup_title": "Installe-le avec ton agent de code",
         "setup_text": "Copie le prompt et colle-le dans ton agent de code, dans le dossier de ton projet. Il trouve ton projet ADK et pose ADK Lens par-dessus. Pas encore de projet ADK ? Il te propose de créer ton premier agent.",
@@ -122,8 +128,21 @@ def rotator(lang: str) -> str:
 
 def copy_button(lang: str, prompt: str, label: str, cls: str = "btn btn--primary") -> str:
     t = T[lang]
-    return (f'<button class="{cls}" type="button" data-copy="{e(prompt)}" data-copied="{e(t["copied_live"])}">'
+    return (f'<button class="{cls}" type="button" data-copy="{e(prompt)}" data-copied="{e(t["copied_live"])}" '
+            f'data-fail="{e(t["copy_fail"])}" data-fail-link="{e(t["copy_fail_link"])}" data-fail-href="{REPO}/blob/main/AGENT-SETUP.md">'
             f'<span class="is-idle">{e(label)}</span><span class="is-done" aria-hidden="true">{e(t["copied"])}</span></button>')
+
+
+MANUAL = ['pip install "git+https://github.com/Connected-Mate/adk-lens"', "adk-lens demo"]
+
+
+def manual(lang: str) -> str:
+    """The by-hand path, folded away: two terminal commands (never the prompt text)."""
+    t = T[lang]
+    lines = "".join(f"<code>{e(c)}</code>" for c in MANUAL)
+    return (f'<details class="manual"><summary>{e(t["manual"])}</summary><div class="manual__in"><div class="manual__cmd">{lines}</div>'
+            f'<button class="btn btn--soft btn--sm" type="button" data-copy="{e(chr(10).join(MANUAL))}" data-copied="{e(t["manual_live"])}">'
+            f'<span class="is-idle">{e(t["manual_copy"])}</span><span class="is-done" aria-hidden="true">{e(t["manual_copied"])}</span></button></div></details>')
 
 
 def board_svg(lang: str) -> str:
@@ -179,8 +198,8 @@ def body(lang: str, prefix: str, other_href: str) -> str:
     chips = "".join(f"<li>{i}{e(label)}</li>" for i, label in agents(lang))
     steps = "".join(f"<li>{e(s)}</li>" for s in t["steps"])
     shots = "\n".join(
-        f'    <figure class="shot zoom" data-shot="{prefix}assets/{f}" data-alt="{e(alt)}" hidden><figcaption class="small body">{e(cap)}</figcaption></figure>'
-        for f, alt, cap in t["shots"])
+        f'    <figure class="shot" data-shot="{prefix}assets/{f}" data-alt="{e(alt)}" data-tab="{e(tab)}" hidden><figcaption class="small body">{e(cap)}</figcaption></figure>'
+        for f, alt, cap, tab in t["shots"])
     nb = lambda x: e(x).replace(" ?", "&nbsp;?").replace(" :", "&nbsp;:").replace("« ", "«&nbsp;").replace(" »", "&nbsp;»")  # French spacing
     faq = "\n".join(f'      <details class="qa"><summary>{nb(q["q"][lang])}</summary><p>{nb(q["a"][lang])}</p></details>' for q in SHEET["faq"])
     lang_link = (f'<a class="lang" href="{other_href}" data-lang="{other}" data-lang-key="{key}" hreflang="{other}" lang="{other}" '
@@ -205,19 +224,22 @@ def body(lang: str, prefix: str, other_href: str) -> str:
     <p class="fine">{e(SHEET['platform'][lang])}</p>
   </div>
 </section>
-<figure class="wrap stage">
-  <div class="board zoom"><div class="board__canvas">{board_svg(lang)}</div></div>
-  <figcaption class="caption">{e(t['caption'])}</figcaption>
-</figure>
-<section class="wrap statement" id="features" aria-label="{e(t['nav'][0][1])}">
+<section class="wrap stage" id="try" aria-labelledby="try-title">
+  <div class="stage__head"><h2 class="h2" id="try-title">{e(t['try_title'])}</h2><p class="body">{e(t['try_text'])}</p></div>
+  <div class="board zoom"><div class="board__canvas play" data-play data-lang="{lang}">{board_svg(lang)}</div></div>
+  <p class="caption">{e(t['caption'])}</p>
+</section>
+<section class="wrap statement" id="features" aria-label="{e(t['nav'][1][1])}">
   <p><span>{e(t['statement'])}</span></p>
 </section>
-<section class="wrap rows" aria-label="{e(t['nav'][0][1])}">
+<section class="wrap rows" aria-label="{e(t['nav'][1][1])}">
 {rows(lang)}
 </section>
 <section class="wrap shots" id="shots" data-shots hidden aria-labelledby="shots-title">
-  <h2 class="h2" id="shots-title">{e(t['shots_title'])}</h2>
+  <div class="shots__head"><h2 class="h2" id="shots-title">{e(t['shots_title'])}</h2><div class="shots__tabs" role="group" aria-label="{e(t['shots_tabs'])}" data-shot-tabs></div></div>
+  <div class="shots__frame zoom">
 {shots}
+  </div>
 </section>
 <section class="wrap setup" id="agent" aria-labelledby="agent-title">
   <div class="setup__panel">
@@ -226,6 +248,7 @@ def body(lang: str, prefix: str, other_href: str) -> str:
     <ul class="agents" role="list">{chips}</ul>
     {copy_button(lang, prompt, t['copy_short'])}
     <ol class="steps small">{steps}</ol>
+    {manual(lang)}
   </div>
 </section>
 <section class="night" id="source" aria-labelledby="source-title">
@@ -249,6 +272,7 @@ def body(lang: str, prefix: str, other_href: str) -> str:
   <div class="foot__end"><span>© {date.today().year} Connected Mate. {e(t['made'])}</span><span>{e(t['indie'])}</span><a href="{LEGAL[lang]}">{e(t['legal'])}</a><a href="{other_href}" data-lang="{other}" data-lang-key="{key}" hreflang="{other}" lang="{other}">{e(t['other'])}</a></div>
 </footer>
 <script src="{prefix}lens.js" defer></script>
+<script src="{prefix}play.js" defer></script>
 </body>
 </html>
 """

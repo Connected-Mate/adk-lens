@@ -66,7 +66,7 @@
   "privacy_url": null,
   "faq": [
     { "q": { "fr": "Est-ce que ça modifie mon code d'agent ?", "en": "Does it change my agent code?" },
-      "a": { "fr": "Non. ADK Lens se pose par-dessus ADK. Tu l'enlèves avec adk-lens off, puis pip uninstall adk-lens.", "en": "No. ADK Lens sits on top of ADK. Remove it with adk-lens off, then pip uninstall adk-lens." } },
+      "a": { "fr": "Non. ADK Lens se pose par-dessus ADK. Pour l'enlever : adk-lens stop, adk-lens off, puis pip uninstall adk-lens.", "en": "No. ADK Lens sits on top of ADK. To remove it: adk-lens stop, adk-lens off, then pip uninstall adk-lens." } },
     { "q": { "fr": "Faut-il une clé d'API pour essayer ?", "en": "Do I need an API key to try it?" },
       "a": { "fr": "Non. adk-lens demo tourne avec un faux modèle, sans clé.", "en": "No. adk-lens demo runs with a fake model, no key needed." } },
     { "q": { "fr": "Où vont mes données ?", "en": "Where does my data go?" },

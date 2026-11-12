@@ -19,17 +19,27 @@
     stuck();
   }
 
-  // Copy the prompt. The button keeps its width; the label swaps, and a live region says it.
-  var live;
-  function announce(msg) {
-    if (!live) {
-      live = document.createElement('p');
-      live.className = 'sr-only';
-      live.setAttribute('aria-live', 'polite');
-      document.body.appendChild(live);
+  // Copy the prompt. The label swaps on the button, and a toast says what to do next.
+  var toast, toastTimer;
+  function say(msg, linkText, linkHref) {
+    if (!toast) {
+      toast = document.createElement('p');
+      toast.className = 'toast';
+      toast.setAttribute('role', 'status');
+      document.body.appendChild(toast);
     }
-    live.textContent = '';
-    setTimeout(function () { live.textContent = msg; }, 50);
+    toast.classList.remove('is-in');
+    clearTimeout(toastTimer);
+    setTimeout(function () {
+      toast.textContent = msg;
+      if (linkText && linkHref) {
+        var a = document.createElement('a');
+        a.href = linkHref; a.rel = 'noopener'; a.textContent = linkText;
+        toast.appendChild(document.createTextNode(' ')); toast.appendChild(a);
+      }
+      toast.classList.add('is-in');
+      toastTimer = setTimeout(function () { toast.classList.remove('is-in'); }, linkText ? 9000 : 4200);
+    }, 60);
   }
   function legacyCopy(text) {
     try {
@@ -44,38 +54,50 @@
       return ok;
     } catch (e) { return false; }
   }
-  function selectPrompt() {
-    var code = document.querySelector('.prompt');
-    if (!code || !window.getSelection) return;
-    var range = document.createRange();
-    range.selectNodeContents(code);
-    var sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
-    code.scrollIntoView({ block: 'center' });
-  }
   document.querySelectorAll('[data-copy]').forEach(function (btn) {
     var timer;
     btn.addEventListener('click', function () {
       var text = btn.getAttribute('data-copy');
       var done = function () {
         btn.classList.add('is-copied');
-        announce(btn.getAttribute('data-copied'));
+        say(btn.getAttribute('data-copied'));
         clearTimeout(timer);
         timer = setTimeout(function () { btn.classList.remove('is-copied'); }, 2200);
       };
+      // Copy refused (old browser, blocked permission): say so and point to the guide, never fail silently.
+      var failed = function () {
+        say(btn.getAttribute('data-fail') || 'Copy blocked.', btn.getAttribute('data-fail-link'), btn.getAttribute('data-fail-href'));
+      };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text) ? done() : selectPrompt(); });
+        navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text) ? done() : failed(); });
       } else {
-        legacyCopy(text) ? done() : selectPrompt();
+        legacyCopy(text) ? done() : failed();
       }
     });
   });
 
-  // Real screenshots: shown only when the files exist.
+  // Real screenshots: one frame, one tab per picture. Shown only when the files exist.
+  // The tabs turn by themselves while the frame is on screen, until the visitor picks one.
   var shots = document.querySelector('[data-shots]');
   if (shots) {
-    shots.querySelectorAll('[data-shot]').forEach(function (fig) {
+    var tabsBox = shots.querySelector('[data-shot-tabs]');
+    var figs = [].slice.call(shots.querySelectorAll('[data-shot]'));
+    var tabs = [], current = -1, autoTurn = !reduce, turnTimer = 0, onScreen = false;
+    var show = function (i) {
+      current = i;
+      figs.forEach(function (f, n) { f.classList.toggle('is-on', n === i); });
+      tabs.forEach(function (t, n) { if (t) { t.setAttribute('aria-pressed', n === i ? 'true' : 'false'); t.classList.toggle('is-timed', n === i && autoTurn && onScreen); } });
+    };
+    var turn = function () {
+      clearTimeout(turnTimer);
+      if (!autoTurn || !onScreen) return;
+      turnTimer = setTimeout(function () {
+        var n = current;
+        do { n = (n + 1) % figs.length; } while (figs[n].hidden && n !== current);
+        show(n); turn();
+      }, 5200);
+    };
+    figs.forEach(function (fig, i) {
       var probe = new Image();
       probe.onload = function () {
         if (!probe.naturalWidth) return;
@@ -84,14 +106,26 @@
         img.alt = fig.getAttribute('data-alt') || '';
         img.width = probe.naturalWidth;
         img.height = probe.naturalHeight;
-        img.loading = 'lazy';
         img.decoding = 'async';
         fig.insertBefore(img, fig.firstChild);
         fig.hidden = false;
         shots.hidden = false;
+        if (tabsBox) {
+          var tab = document.createElement('button');
+          tab.type = 'button'; tab.className = 'shots__tab';
+          tab.textContent = fig.getAttribute('data-tab') || String(i + 1);
+          tab.addEventListener('click', function () { autoTurn = false; clearTimeout(turnTimer); show(i); });
+          tabs[i] = tab;
+          tabsBox.textContent = '';
+          tabs.forEach(function (t) { if (t) tabsBox.appendChild(t); });
+        }
+        if (current === -1 || i < current) show(i); else show(current);
       };
       probe.src = fig.getAttribute('data-shot');
     });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (e) { onScreen = e[0].isIntersecting; if (current > -1) show(current); turn(); }, { threshold: 0.3 }).observe(shots);
+    }
   }
 
   // Scroll zoom for browsers without CSS scroll-driven animations.
