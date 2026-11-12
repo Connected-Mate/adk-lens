@@ -374,6 +374,22 @@ b { font-weight: 600; }
 .base.is-on { border-color: color-mix(in oklab, var(--violet) 45%, transparent); }
 .base.flash { animation: base-flash 700ms var(--ease); }
 @keyframes base-flash { 30% { transform: scale(1.05); background-color: var(--tint-violet); box-shadow: 0 0 0 3px color-mix(in oklab, var(--violet) 26%, transparent); } }
+/* Protected by a safety check: a shield on the corner. */
+.guard-tag {
+  position: absolute; left: -9px; top: -9px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface); color: var(--green); border: 1.5px solid color-mix(in oklab, var(--green) 55%, transparent); box-shadow: var(--shadow-1);
+  transition: background-color 240ms var(--ease), color 240ms var(--ease), transform 240ms var(--ease);
+}
+.node.is-guarding .guard-tag { background: var(--green); color: #fff; transform: scale(1.25); }
+.node.is-guarding.is-active { border-color: var(--green); box-shadow: 0 0 0 3px color-mix(in oklab, var(--green) 26%, transparent), var(--shadow-2); }
+.node.is-guarding.is-active::after { border-color: var(--green); }
+.base.k-guards .base-ico { color: var(--green); }
+.base.k-guards.is-none .base-ico { color: var(--ink-3); }
+.guards { display: grid; gap: 10px; }
+.guard { display: flex; gap: 10px; align-items: flex-start; }
+.guard-ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none; background: var(--tint-green); color: var(--green); }
+.guard-line { font-size: 14.5px; overflow-wrap: anywhere; }
+.guard-about { font-size: 13.5px; color: var(--ink-2); margin-top: 1px; }
 .node.is-warn { border-color: var(--yellow); background: var(--tint-yellow); }
 .node.is-warn .node-ico { color: var(--yellow); background: var(--surface); }
 .warn-tag {
@@ -595,8 +611,11 @@ b { font-weight: 600; }
   opacity: 0; transform: translateY(calc(var(--cap-dy, 7px) * -1)); filter: blur(3px);
   transition: opacity 120ms var(--ease), transform 200ms var(--ease), filter 120ms var(--ease);
 }
-.cap-line { font-size: 20px; line-height: 1.3; letter-spacing: -0.012em; font-weight: 450; overflow-wrap: anywhere; }
-.cap-body { font-size: 14.5px; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* Two lines for the sentence, one for what it carries: the rest is in the Story. */
+.cap-line { font-size: 20px; line-height: 1.3; letter-spacing: -0.012em; font-weight: 450; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cap-shield { display: inline-block; vertical-align: -3px; margin-right: 7px; color: var(--green); }
+.cap-shield .ico { display: inline-block; }
+.cap-body { font-size: 14.5px; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .cap-body:empty { display: none; }
 .cap-in[data-tone="error"] .cap-line { color: var(--red); }
 .cap-in[data-tone="problem"] .cap-line { color: color-mix(in oklab, var(--yellow) 55%, var(--ink)); }
@@ -695,6 +714,9 @@ b { font-weight: 600; }
 .tone-error .st-ico { color: var(--red); background: var(--tint-red); }
 .st.is-problem .st-ico { color: #8a5a00; background: var(--tint-yellow); }
 .st.is-problem .st-line { color: color-mix(in oklab, var(--yellow) 55%, var(--ink)); }
+.tone-guard .st-ico, .tone-blocked .st-ico { color: var(--green); background: var(--tint-green); }
+.st.is-current.tone-guard .st-ico, .st.is-current.tone-blocked .st-ico { background: var(--green); color: #fff; }
+.tone-blocked .st-line { font-weight: 550; }
 .tone-pass .st-ico { color: var(--violet); background: var(--tint-violet); }
 .st.is-current.tone-error .st-ico { background: var(--red); color: #fff; }
 .st-head { display: flex; align-items: baseline; gap: 10px; }

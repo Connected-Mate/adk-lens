@@ -14,6 +14,7 @@ const TRUNK = 36;
 const BASE = { h: 50, gap: 10 }; // what an app stands on: its model, its session memory
 export const MODEL = '@model';
 export const MEMORY = '@memory';
+export const GUARDS = '@guards';
 const GAP_Y = 34;
 const PAD = 26;
 const HEAD = 46;
@@ -36,6 +37,10 @@ export function layout(topo) {
   const bases = [];
   if (models.length === 1) bases.push({ id: MODEL, kind: 'model', text: models[0] });
   if (keys.length) bases.push({ id: MEMORY, kind: 'memory', text: keys.join(', ') });
+  // Safety: how many checks, on how many of the agents. Said even when there is none.
+  const agentsAll = topo.nodes.filter((n) => !TOOLS.has(n.kind) && !GROUPS.has(n.kind));
+  const guarded = agentsAll.filter((n) => n.guards && n.guards.length);
+  if (agentsAll.length) bases.push({ id: GUARDS, kind: 'guards', n: guarded.reduce((sum, n) => sum + n.guards.length, 0), a: guarded.length, total: agentsAll.length });
 
   const seen = new Set();
   const synth = []; // arrows we add inside groups ("then", "again")

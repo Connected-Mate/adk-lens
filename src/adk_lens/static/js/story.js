@@ -1,12 +1,12 @@
 // The "Story" view: one plain sentence per step, details behind a click.
 import { h, clear, clipped, pretty, short, fmtDuration, put } from './dom.js';
 import { icon } from './icons.js';
-import { t, tn } from './i18n.js';
+import { t, tn, tp } from './i18n.js';
 import { stepsOf } from './store.js';
 
 const TONE_ICON = {
   ask: 'user', agent: 'llm', think: 'llm', thought: 'llm', tool: 'tool', tool_result: 'tool', handoff: 'handoff',
-  memory: 'memory', file: 'doc', output: 'check', escalate: 'loop', answer: 'comment', pass: 'handoff', done: 'check', error: 'warn',
+  memory: 'memory', file: 'doc', output: 'check', escalate: 'loop', answer: 'comment', pass: 'handoff', blocked: 'shield', guard: 'shield', done: 'check', error: 'warn',
 };
 
 function argsShort(args) {
@@ -56,6 +56,8 @@ export function sentence(step) {
     case 'output': return { key: 's.output', vars: { agent }, body: bodyOf(step.output) };
     case 'escalate': return { key: 's.escalate', vars: { agent } };
     case 'answer': return { key: 's.answer', vars: { agent }, body: step.text };
+    case 'blocked': return { key: step.guard ? 's.blocked.by' : 's.blocked', vars: { agent, guard: step.guard }, body: step.text };
+    case 'guard': return { key: step.tool ? 's.guard' : 's.guard.any', vars: { agent, tool: step.tool }, body: [step.guard, step.removed ? tp('s.guard.removed', step.removed) : ''].filter(Boolean).join(' · ') };
     case 'pass': return { key: 's.pass', vars: { agent }, body: step.text };
     case 'done': if (step.interrupted) return { key: 's.interrupted', vars: {} };
       return ev.duration_ms ? { key: 's.done.d', vars: { d: fmtDuration(ev.duration_ms) } } : { key: 's.done', vars: {} };
@@ -92,6 +94,8 @@ function detailsContent(step) {
     if (ev.tokens_in !== undefined || ev.tokens_out !== undefined) out.push(h('p', { class: 'kv-note', text: t('story.tokens', { a: ev.tokens_in ?? '?', b: ev.tokens_out ?? '?' }) }));
   } else if (step.kind === 'tool') out.push(block(t('story.args'), ev.args));
   else if (step.kind === 'tool_result') out.push(block(t('story.result'), ev.result));
+  else if (step.kind === 'guard') out.push(block(t('story.guard.cut'), cutLines(step.given, step.received)), block(t('story.guard.given', { tool: step.tool }), textOf(step.given)), block(t('story.guard.received', { agent: step.agent }), textOf(step.received)));
+  else if (step.kind === 'blocked') out.push(block(t('story.guard.said'), step.text));
   else if (step.kind === 'memory') out.push(block(t('story.result'), step.delta));
   else if (step.kind === 'output') out.push(block(t('story.result'), step.output));
   else if (step.kind === 'error') {
@@ -107,6 +111,20 @@ function detailsContent(step) {
     if (raw.open && raw.children.length === 1) put(raw, h('pre', { class: 'json', tabindex: '0', text: pretty(all) }));
   });
   return [...shown, raw];
+}
+
+// What a tool returned, as words when it has a `text` (a web page), so before and after can be compared by eye.
+function textOf(result) {
+  if (result && typeof result === 'object' && typeof result.text === 'string') return result.text;
+  return result;
+}
+
+// The lines the tool gave that the agent never saw.
+function cutLines(given, received) {
+  const a = textOf(given), b = textOf(received);
+  if (typeof a !== 'string' || typeof b !== 'string') return '';
+  const kept = new Set(b.split('\n'));
+  return a.split('\n').filter((line) => line.trim() && !kept.has(line)).join('\n');
 }
 
 function partsText(parts) {

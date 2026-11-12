@@ -33,6 +33,13 @@ const pathNames = (p) => (Array.isArray(p) ? p : typeof p === 'string' ? p.split
   .map((x) => str(x).replace(/@\d+$/, '')).filter(Boolean);
 const TRANSFER = 'transfer_to_agent';
 
+// The agent's own safety checks (its ADK callbacks): [{when, name, about}].
+function cleanGuards(list) {
+  return arr(list).filter((g) => g && typeof g === 'object' && (g.name || g.when))
+    .map((g) => ({ when: str(g.when), name: str(g.name) || str(g.when), about: str(g.about).replace(/^\w+_callback:\s*/, '').replace(/^./, (c) => c.toUpperCase()) }));
+}
+export const guardKey = (g) => `${g.when}:${g.name}`;
+
 function cleanTopology(t, app) {
   const raw = obj(t);
   const seen = new Set();
@@ -42,7 +49,7 @@ function cleanTopology(t, app) {
     const id = str(n.id || n.name);
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    nodes.push({ ...n, id, name: str(n.name || id), kind: str(n.kind || 'custom'), parent: n.parent ? str(n.parent) : null });
+    nodes.push({ ...n, id, name: str(n.name || id), kind: str(n.kind || 'custom'), parent: n.parent ? str(n.parent) : null, guards: cleanGuards(n.guards) });
   }
   const edges = [];
   for (const e of arr(raw.edges)) {
@@ -327,6 +334,16 @@ function buildSteps(run) {
         add(ev, 'think', { node: agentNodeId(app, agentName || top), agent: agentName || top });
         break;
       case 'model_end': {
+        if (ev.guarded) {
+          // A safety check answered in the model's place: the model never ran, so it did not "think".
+          const node = agentNodeId(app, agentName || top);
+          const prev = steps[steps.length - 1];
+          if (prev && prev.kind === 'think' && prev.node === node) steps.pop();
+          const when = str(ev.guard_when) || 'before_model';
+          const g = ((nodeOf(node) || {}).guards || []).find((x) => x.when === when);
+          add(ev, 'blocked', { node, agent: agentName || top, when, guard: g ? g.name : '', text: str(ev.text) || textOfParts(ev.parts) });
+          break;
+        }
         const calls = arr(ev.calls).filter((c) => c && typeof c === 'object');
         const fromParts = arr(ev.parts).filter((p) => p && p.kind === 'call');
         add(ev, 'thought', {
@@ -400,6 +417,16 @@ function buildSteps(run) {
           if (inFlow(a)) add(ev, 'pass', { node: a, agent: author || top, text });
           else add(ev, 'answer', { node: USER, from: a, to: USER, agent: author || top, text });
         }
+        break;
+      }
+      case 'guard': {
+        // A safety check changed what a tool returned, before the agent read it.
+        const node = agentNodeId(app, agentName || top);
+        const when = str(ev.when) || 'after_tool';
+        const g = ((nodeOf(node) || {}).guards || []).find((x) => x.when === when);
+        const end = ev.call_id ? run.events.find((x) => x.type === 'tool_end' && x.call_id === ev.call_id) : null;
+        const removed = Number(obj(obj(ev.result).safety_check).removed_lines) || 0;
+        add(ev, 'guard', { node, agent: agentName || top, tool: str(ev.tool), when, guard: g ? g.name : '', given: end ? end.result : undefined, received: ev.result, removed });
         break;
       }
       case 'agent_error':
@@ -500,9 +527,14 @@ export function diffTopologies(a, b) {
     for (const f of ['instruction', 'model', 'description']) if (str(old[f]) !== str(n[f])) fields.push(f);
     if (old.kind !== n.kind) fields.push('kind');
     if (toolsOf(a, id) !== toolsOf(b, id)) fields.push('tools');
+    // Safety checks added or removed: said by name, it is often the only thing that changed.
+    const was = new Set((old.guards || []).map(guardKey)), now = new Set((n.guards || []).map(guardKey));
+    const guardsAdded = (n.guards || []).filter((g) => !was.has(guardKey(g)));
+    const guardsRemoved = (old.guards || []).filter((g) => !now.has(guardKey(g)));
+    if (guardsAdded.length || guardsRemoved.length) fields.push('guards');
     if (fields.length) {
       res.nodes.set(id, 'changed');
-      res.list.push({ status: 'changed', node: n, old, fields });
+      res.list.push({ status: 'changed', node: n, old, fields, guardsAdded, guardsRemoved });
     }
   }
   for (const [id, n] of an) {

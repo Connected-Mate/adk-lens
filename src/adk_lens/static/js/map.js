@@ -3,7 +3,7 @@ import { h, s, clear, reducedMotion, put } from './dom.js';
 import { icon } from './icons.js';
 import { layout, freePath, MODEL, MEMORY } from './layout.js';
 import { USER } from './store.js';
-import { t } from './i18n.js';
+import { t, tp } from './i18n.js';
 
 const GROUPS = new Set(['sequential', 'parallel', 'loop', 'workflow']);
 const EDGE_LABEL = { ask: 'edge.ask', delegate: 'edge.delegate', then: 'edge.then', again: 'edge.again', uses_agent: 'edge.uses_agent', wraps: 'edge.wraps' };
@@ -157,7 +157,7 @@ export function createMap(stage, opts) {
     let dx = 0, dy = 0;
     // Inside the margins of fit(), so a map that fits is never nudged around while it plays.
     const { pad } = safeArea(r);
-    const m = { left: pad.left - 24, right: pad.right - 6, top: pad.top - 8, bottom: pad.bottom - 10 };
+    const m = { left: pad.left - 6, right: pad.right - 6, top: pad.top - 8, bottom: pad.bottom - 10 };
     if (x1 < m.left) dx = m.left - x1; else if (x2 > r.width - m.right) dx = r.width - m.right - x2;
     if (y1 < m.top) dy = m.top - y1; else if (y2 > r.height - m.bottom) dy = r.height - m.bottom - y2;
     if (!dx && !dy) return;
@@ -230,6 +230,12 @@ export function createMap(stage, opts) {
         },
         h('span', { class: 'node-ico' }, icon(isTool ? n.kind : (n.kind in { llm: 1, remote: 1, step: 1 } ? n.kind : GROUPS.has(n.kind) ? n.kind : 'custom'), isTool ? 16 : 20)),
         h('span', { class: 'node-txt' }, h('span', { class: 'node-name', text: n.name }), sub));
+        if (n.guards && n.guards.length) {
+          // Protected: a small shield on its corner.
+          const what = `${tp('guard.mark', n.guards.length)}: ${n.guards.map((g) => g.name).join(', ')}`;
+          el.setAttribute('aria-label', `${n.name}, ${kindLabel(n.kind)}, ${what}`);
+          put(el, h('span', { class: 'guard-tag', title: what }, icon('shield', 14)));
+        }
       }
       if (status) {
         el.classList.add(`d-${status}`);
@@ -244,8 +250,9 @@ export function createMap(stage, opts) {
     // What the app stands on.
     baseEls.clear();
     for (const b of lay.bases || []) {
-      const el = h('div', { class: `base k-${b.kind}`, role: 'img', 'aria-label': t(`base.${b.kind}.aria`, { text: b.text }), title: b.text, dataset: { id: b.id } },
-        h('span', { class: 'base-ico' }, icon(b.kind === 'model' ? 'chip' : 'memory', 17)),
+      if (b.kind === 'guards') b.text = b.n ? t('base.guards.sub', b) : t('base.guards.none', b);
+      const el = h('div', { class: `base k-${b.kind}${b.kind === 'guards' && !b.n ? ' is-none' : ''}`, role: 'img', 'aria-label': t(`base.${b.kind}.aria`, { text: b.text }), title: b.text, dataset: { id: b.id } },
+        h('span', { class: 'base-ico' }, icon(b.kind === 'model' ? 'chip' : b.kind === 'guards' ? 'shield' : 'memory', 17)),
         h('span', { class: 'node-txt' }, h('span', { class: 'base-name', text: t(`base.${b.kind}`) }), h('span', { class: 'base-sub', text: b.text })));
       place(el, lay.boxes.get(b.id));
       put(nodeLayer, el);
@@ -297,6 +304,7 @@ export function createMap(stage, opts) {
       el.classList.toggle('is-visited', frame.visited.has(id));
       el.classList.toggle('is-active', active);
       el.classList.toggle('is-thinking', active && frame.kind === 'think');
+      el.classList.toggle('is-guarding', active && (frame.kind === 'guard' || frame.kind === 'blocked'));
       const err = frame.errors.get(id);
       el.classList.toggle('is-error', err !== undefined);
       let tag = el.querySelector(':scope > .err-tag');
@@ -494,6 +502,17 @@ export function createMap(stage, opts) {
       applyView();
     }
   }, { passive: false });
+
+  // Focusing a block that is off screen (Tab key) makes the browser scroll the stage, which would leave the
+  // map shifted under its own controls: turn that scroll into a move of the map instead.
+  stage.addEventListener('scroll', () => {
+    const dx = stage.scrollLeft, dy = stage.scrollTop;
+    if (!dx && !dy) return;
+    stage.scrollLeft = 0; stage.scrollTop = 0;
+    if (cam) return; // the camera is already on its way somewhere
+    view.x -= dx; view.y -= dy;
+    applyView();
+  });
 
   nodeLayer.addEventListener('click', (e) => {
     const el = e.target.closest('[data-id]');

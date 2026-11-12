@@ -16,6 +16,7 @@ const params = new URLSearchParams(location.search);
 const HEAD = { 'X-ADK-Lens': '1', 'Content-Type': 'application/json' };
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4];
 const TOOLS = new Set(['tool', 'toolset']);
+const FLOWS = new Set(['sequential', 'parallel', 'loop', 'workflow']);
 const MORE_MARKS = ['idea', 'bug', 'like'];
 const stampFace = (sId) => h('span', { class: `stamp-face stamp-${sId} mini`, 'aria-hidden': 'true', text: STAMPS[sId] });
 
@@ -508,8 +509,8 @@ function renderPlayer(o = {}) {
   // The same sentence is left alone (a live request re-renders at every event): only a new one swaps in.
   const capKey = st ? [getLang(), run.id, st.id, t(sn.key, sn.vars), sn.body ? short(sn.body, 220) : ''].join('\u0001') : `none:${run.id}`;
   const back = renderPlayer.run === run.id && ui.idx < renderPlayer.idx;
-  caption.set(capKey, () => (st ? [h('span', { class: 'cap-line' }, tn(sn.key, sn.vars)), sn.body ? h('span', { class: 'cap-body', text: short(sn.body, 220) }) : null] : null),
-    { tone: st ? (st.problem ? 'problem' : st.kind) : '', instant: !!o.scrub, back });
+  caption.set(capKey, () => (st ? [h('span', { class: 'cap-line' }, st.kind === 'guard' || st.kind === 'blocked' ? h('span', { class: 'cap-shield' }, icon('shield', 18)) : null, tn(sn.key, sn.vars)), sn.body ? h('span', { class: 'cap-body', text: short(sn.body, 220) }) : null] : null),
+    { tone: st ? (st.problem ? 'problem' : st.kind) : '', instant: !!o.scrub, back, icon: st && (st.kind === 'guard' || st.kind === 'blocked') ? 'shield' : '' });
   const atEnd = ui.idx >= steps.length - 1;
   const waiting = ui.playing && atEnd && run.status === 'live';
   el.play.classList.toggle('is-playing', ui.playing);
@@ -982,6 +983,13 @@ function nodeCard(id) {
     h('p', { class: 'lead', text: what === `what.${node.kind}` ? t('what.custom') : what }),
     node.description ? h('p', { class: 'desc' }, clipped(node.description, 260, labels)) : null,
     node.dynamic ? h('p', { class: 'muted', text: t('what.dynamic') }) : null));
+  if (!isUser && !TOOLS.has(node.kind) && !FLOWS.has(node.kind)) {
+    const gs = node.guards || [];
+    put(body, section(t('card.guards'), gs.length
+      ? h('ul', { class: 'guards' }, gs.map((g) => h('li', { class: 'guard' }, h('span', { class: 'guard-ico' }, icon('shield', 16)),
+        h('div', null, h('p', { class: 'guard-line' }, `${t(`guard.${g.when}`) === `guard.${g.when}` ? g.when : t(`guard.${g.when}`)}${t('colon')}`, h('b', { text: g.name })), g.about ? h('p', { class: 'guard-about', text: short(g.about, 200) }) : null))))
+      : h('p', { class: 'muted', text: t('card.guards.none') })));
+  }
   if (node.instruction) put(body, section(t('card.instruction'), h('blockquote', { class: 'quote' }, clipped(node.instruction, 220, labels))));
   const facts = [];
   if (node.model) facts.push([t('card.model'), String(node.model)]);
@@ -1117,7 +1125,9 @@ function diffPanel() {
   const ul = h('ul', { class: 'diff-list' });
   for (const d of diff.list) {
     const kind = kindName(d.node.kind);
-    const vars = { name: d.node.name, kind, fields: (d.fields || []).map((f) => t(`diff.f.${f}`)).join(', ') };
+    const names = (list) => list.map((g) => g.name).join(', ');
+    const said = (f) => (f !== 'guards' ? t(`diff.f.${f}`) : [d.guardsAdded.length ? t('diff.guard.added', { names: names(d.guardsAdded) }) : '', d.guardsRemoved.length ? t('diff.guard.removed', { names: names(d.guardsRemoved) }) : ''].filter(Boolean).join(', '));
+    const vars = { name: d.node.name, kind, fields: (d.fields || []).map(said).join(', ') };
     const li = h('li', { class: `diff-item d-${d.status}` }, h('span', { class: 'diff-tag', text: t(`diff.${d.status}`) }), h('span', { class: 'diff-line' }, tn(`diff.s.${d.status}`, vars)));
     if (d.status === 'changed') {
       const det = h('details', { class: 'st-details' }, h('summary', { text: t('story.details') }));
