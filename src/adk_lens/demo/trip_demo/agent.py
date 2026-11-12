@@ -106,6 +106,10 @@ weather_agent = LlmAgent(
     description="Answers weather questions for a city.",
     instruction="[weather] You give the weather. Always use the get_weather tool, never guess.",
     tools=[get_weather],
+    # The weather agent answers and stops: it never hands the traveller to the trip planner.
+    # Saying so also keeps the demo running on ADK 2.0 and 2.1, which trip over a peer that
+    # is a SequentialAgent when they list hand-off targets.
+    disallow_transfer_to_peers=True,
 )
 
 researcher = LlmAgent(

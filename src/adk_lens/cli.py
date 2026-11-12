@@ -171,6 +171,13 @@ def main(argv=None) -> int:
         transport.mark_stopped()
         was_ours = transport.ping() is not None
         if was_ours and _post("/api/shutdown"):
+            # Wait for the port to be free, so a command typed right after can start the board again.
+            import time
+
+            for _ in range(30):
+                if not transport.port_busy():
+                    break
+                time.sleep(0.1)
             _say("Board stopped. It stays stopped until you run `adk-lens open` (or any other adk-lens command that starts it).")
         else:
             _say("The board was not running. It stays off until you run `adk-lens open` (or any other adk-lens command that starts it).")

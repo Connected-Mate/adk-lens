@@ -617,3 +617,15 @@ def test_unknown_command_gets_our_own_help(capsys):
     said = capsys.readouterr().err
     assert "unknown command 'bogus-command'" in said and "adk-lens demo" in said
     assert "adk --help" not in said
+
+
+def test_demo_answers_all_three_questions():
+    """The whole demo script, on whatever ADK is installed (CI also runs it on 2.0.0, where
+    hand-offs next to a SequentialAgent used to break the two weather questions)."""
+    runner = _runner()
+    weather = asyncio.run(_ask(runner, "What's the weather in Lisbon this weekend?"))
+    assert ("weather_agent", ["Lisbon: sunny, 15 to 24 °C."]) in weather
+    trip = asyncio.run(_ask(runner, "Plan a weekend trip to Marseille for me."))
+    assert any(author == "writer" and "Marseille" in (texts[0] or "") for author, texts in trip)
+    with pytest.raises(ValueError, match="Atlantis"):
+        asyncio.run(_ask(runner, "And what's the weather in Atlantis?"))

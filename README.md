@@ -83,11 +83,14 @@ Settings: `ADK_LENS_PORT` (default 4790), `ADK_LENS_CONTENT=0`, `ADK_LENS_QUIET=
 ## Limits
 
 - Python ADK only, google-adk 1.7.0 or later (the first version with plugins). Built on 2.14; the demo and the
-  test suite were also run on 1.7.0, 1.12, 1.18, 1.19, 1.22, 1.28, 1.39, 2.2 and 2.6. On an older ADK the lens switches
+  test suite were also run on 1.7.0, 1.12, 1.18, 1.19, 1.22, 1.28, 1.39, 2.0.0, 2.1.0, 2.2 and 2.6. On an older ADK the lens switches
   itself off and says so in one line. TypeScript, Go and Java are not covered.
 - What older ADK versions cannot tell the lens: on 1.7 and 1.8 a failing tool is not marked on its own (the request is
-  still shown as failed, with the error). ADK 2.0.0 and 2.1.0 have a bug of their own in hand-offs to a sequential
-  agent (with or without the lens): the demo needs 2.2 or later, or 1.x.
+  still shown as failed, with the error).
+- ADK 2.0.0 and 2.1.0 only: an agent that sits next to a `SequentialAgent` (or a parallel or loop agent) under the
+  same parent fails with `object has no attribute 'mode'`. This is ADK's own bug, with or without the lens, fixed in
+  ADK 2.2. If you must stay on 2.0 or 2.1, set `disallow_transfer_to_peers=True` on that agent. The demo does it, so
+  it runs on every supported version.
 - A program that lives for less than a second while no board is running may be missing from the board: the lens
   never holds a program back when it exits. Start the board first (`adk-lens open`).
 - If the agent program is killed in the middle of a request, the board closes that request a few seconds later and
