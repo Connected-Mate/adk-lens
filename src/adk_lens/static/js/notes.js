@@ -314,7 +314,8 @@ export function createNotes(map, stage, opts) {
       const on = nodeAt(pt);
       // Dropped on a node: it belongs to that node and sits on its corner instead of covering its name.
       const where = on ? { target: { type: 'node', id: on, name: opts.nodeName(on) } } : { x: pt.x - 26, y: pt.y - 26 };
-      add({ type: 'stamp', stamp, kind: stamp, ...where }, 'self');
+      // The word box takes the keyboard at once, so typing never triggers the player's shortcuts.
+      add({ type: 'stamp', stamp, kind: stamp, ...where }, 'field');
     } else add({ type: 'zone', shape: 'ellipse', x: pt.x - 150, y: pt.y - 95, w: 300, h: 190 });
     setTool('select');
   }

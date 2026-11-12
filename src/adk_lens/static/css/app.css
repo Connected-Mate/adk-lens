@@ -467,6 +467,8 @@ b { font-weight: 600; }
   animation: pop-in 180ms var(--ease) backwards;
 }
 .stamp .note-bar, .zone-label .note-bar { bottom: auto; top: calc(100% + 10px); transform-origin: 50% 0; }
+/* On a node the bar opens above the mark, so it never covers the node's name. */
+.stamp.on-node .note-bar { top: auto; bottom: calc(100% + 10px); transform-origin: 50% 100%; }
 .kind-picker { display: inline-flex; gap: 3px; }
 .kind-chip {
   height: 28px; padding: 0 10px; border-radius: var(--pill); font-size: 13px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px;
