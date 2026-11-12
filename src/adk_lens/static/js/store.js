@@ -2,6 +2,15 @@
 // Every field of every event is optional and untrusted.
 
 const AGENT_TOOL_KINDS = new Set(['tool', 'toolset']);
+const FLOW_KINDS = new Set(['sequential', 'parallel', 'loop', 'workflow']);
+const BAD_STATUS = new Set(['error', 'failed', 'failure', 'refused', 'rejected', 'denied']);
+// A tool that ran but came back saying it could not do it (an `error` field, a refused status).
+function problemOf(result) {
+  const r = obj(result);
+  if (r.error) return typeof r.error === 'string' ? r.error : str(r.message) || 'error';
+  if (BAD_STATUS.has(str(r.status).toLowerCase())) return str(r.reason) || str(r.message) || str(r.status);
+  return '';
+}
 export const USER = '@user';
 
 export const store = {
@@ -250,6 +259,17 @@ function buildSteps(run) {
   const topo = store.apps[app];
   let lastHandoffTo = '';
   const lastChild = new Map();
+  const asTool = []; // agents working as a tool for another agent right now
+  const nodeOf = (id) => allNodes(app).find((x) => x.id === id);
+  // Inside a "one after the other / at the same time / again and again" frame, an agent's words go to
+  // the next step of the flow, not to the person.
+  const inFlow = (id) => {
+    for (let n = nodeOf(id), guard = 0; n && n.parent && guard < 40; guard++) {
+      n = nodeOf(n.parent);
+      if (n && FLOW_KINDS.has(n.kind)) return true;
+    }
+    return false;
+  };
   const add = (ev, kind, extra) => {
     const n = steps.filter((x) => x.seq === ev.seq).length;
     steps.push({ id: `${ev.seq ?? steps.length}:${n}`, seq: ev.seq, ts: Number(ev.ts) || 0, kind, ev, ...extra });
@@ -325,14 +345,18 @@ function buildSteps(run) {
         const a = agentNodeId(app, agentName || top);
         const tid = toolNodeId(app, agentName || top, ev.tool, !!ev.agent_tool);
         add(ev, 'tool', { node: tid, from: a, to: tid, agent: agentName || top, tool: str(ev.tool), agentTool: !!ev.agent_tool });
+        if (ev.agent_tool) asTool.push(str(ev.tool));
         break;
       }
       case 'tool_end': {
         if (str(ev.tool) === TRANSFER) break;
         const a = agentNodeId(app, agentName || top);
-        const tid = toolNodeId(app, agentName || top, ev.tool, false);
         const real = steps.slice().reverse().find((x) => x.kind === 'tool' && x.ev.call_id === ev.call_id && ev.call_id);
-        add(ev, 'tool_result', { node: a, from: real ? real.node : tid, to: a, toolNode: real ? real.node : tid, agent: agentName || top, tool: str(ev.tool), agentTool: !!(real && real.agentTool) });
+        // An agent used as a tool is that agent's own block: no second, tool-shaped copy of it.
+        const tid = real ? real.node : toolNodeId(app, agentName || top, ev.tool, false);
+        const gone = asTool.lastIndexOf(str(ev.tool));
+        if (gone >= 0) asTool.splice(gone, 1);
+        add(ev, 'tool_result', { node: a, from: tid, to: a, toolNode: tid, agent: agentName || top, tool: str(ev.tool), agentTool: !!(real && real.agentTool), problem: problemOf(ev.result) });
         break;
       }
       case 'tool_error': {
@@ -371,7 +395,10 @@ function buildSteps(run) {
         // an empty final event, as ADK sends when a request breaks, is not an answer.
         const unrecorded = ev.text === undefined && ev.parts === undefined;
         if (ev.final && (text || unrecorded) && !ev.error && !ev.transfer_to) {
-          add(ev, 'answer', { node: USER, from: a, to: USER, agent: author || top, text });
+          // Working as a tool: its result goes back to the agent that asked (the tool result says so).
+          if (asTool.includes(author)) break;
+          if (inFlow(a)) add(ev, 'pass', { node: a, agent: author || top, text });
+          else add(ev, 'answer', { node: USER, from: a, to: USER, agent: author || top, text });
         }
         break;
       }
@@ -391,13 +418,20 @@ function buildSteps(run) {
         break;
     }
   }
+  // The last word of a flow is the answer the person gets, once the request is over and nobody spoke after it.
+  const end = steps.findIndex((x) => x.kind === 'done' && !x.interrupted);
+  if (end > 0) {
+    let last = -1;
+    for (let i = 0; i < end; i++) if (steps[i].kind === 'pass' || steps[i].kind === 'answer') last = i;
+    if (last >= 0 && steps[last].kind === 'pass') Object.assign(steps[last], { kind: 'answer', from: steps[last].node, to: USER, node: USER });
+  }
   return steps;
 }
 
 // What the map looks like at step `idx` of a run.
 export function frameAt(run, idx) {
   const steps = stepsOf(run);
-  const frame = { active: null, travel: null, visited: new Set(), edges: new Set(), errors: new Map(), kind: null, step: null };
+  const frame = { active: null, travel: null, visited: new Set(), edges: new Set(), errors: new Map(), warns: new Map(), kind: null, step: null, memory: false };
   if (!steps.length || idx < 0) return frame;
   const last = Math.min(idx, steps.length - 1);
   for (let i = 0; i <= last; i++) {
@@ -406,6 +440,8 @@ export function frameAt(run, idx) {
     if (st.from) frame.visited.add(st.from);
     if (st.from && st.to) frame.edges.add(`${st.from}>${st.to}`);
     if (st.kind === 'error' && st.node) frame.errors.set(st.node, st.text || '');
+    if (st.kind === 'tool_result' && st.problem && st.toolNode) frame.warns.set(st.toolNode, st.problem);
+    if (st.kind === 'memory') frame.memory = true;
   }
   const cur = steps[last];
   frame.step = cur;

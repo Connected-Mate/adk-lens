@@ -14,7 +14,7 @@ import { createScrub, createCaption, swapText } from './motion.js';
 
 const params = new URLSearchParams(location.search);
 const HEAD = { 'X-ADK-Lens': '1', 'Content-Type': 'application/json' };
-const SPEEDS = [0.5, 1, 2, 4];
+const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4];
 const TOOLS = new Set(['tool', 'toolset']);
 const MORE_MARKS = ['idea', 'bug', 'like'];
 const stampFace = (sId) => h('span', { class: `stamp-face stamp-${sId} mini`, 'aria-hidden': 'true', text: STAMPS[sId] });
@@ -24,6 +24,8 @@ const ui = {
   view: lsGet('adk-lens.view') === 'linear' ? 'linear' : 'journey',
   version: null, compare: null, panel: null, conn: 'connecting', fixture: false, theme: lsGet('adk-lens.theme') || 'auto',
   elsewhere: null, // {app, runId}: a request that started in an app the board is not showing
+  // Focus: the camera frames each step. null = not chosen yet (on by itself when the whole map is too small to read).
+  focus: lsGet('adk-lens.focus') === '1' ? true : lsGet('adk-lens.focus') === '0' ? false : null,
 };
 const el = {};
 let map, story, notes;
@@ -114,14 +116,17 @@ function buildShell() {
 
   el.zoom = h('div', { class: 'zoom', role: 'group', 'aria-label': t('zoom.fit') },
     btn('icon-btn', t('zoom.out'), [icon('minus', 18)], () => map.zoomBy(1 / 1.25)),
-    btn('icon-btn', t('zoom.fit'), [icon('fit', 18)], () => map.fit()),
+    btn('icon-btn', t('zoom.fit'), [icon('fit', 18)], () => { setFocus(false, false); map.fit(); }),
     btn('icon-btn', t('zoom.in'), [icon('plus', 18)], () => map.zoomBy(1.25)));
 
   // Player.
   el.caption = h('div', { class: 'caption', 'aria-live': 'polite' });
-  el.prev = btn('icon-btn', t('player.prev'), [icon('prev', 20)], () => step(-1));
+  // The keys are said where the buttons are: Space plays, the arrows step, F focuses.
+  el.prev = btn('icon-btn', t('player.prev'), [icon('prev', 20)], () => step(-1), { attrs: { title: `${t('player.prev')} (←)`, 'aria-keyshortcuts': 'ArrowLeft' } });
   el.play = btn('play-btn', t('player.play'), [h('span', { class: 'play-ico' }, icon('play', 22), icon('pause', 22))], () => togglePlay());
-  el.next = btn('icon-btn', t('player.next'), [icon('next', 20)], () => step(1));
+  el.next = btn('icon-btn', t('player.next'), [icon('next', 20)], () => step(1), { attrs: { title: `${t('player.next')} (→)`, 'aria-keyshortcuts': 'ArrowRight' } });
+  el.focus = btn('icon-btn focus-btn', t('player.focus'), [icon('focus', 20)], () => setFocus(!ui.focus, true), { attrs: { title: t('player.focus.hint'), 'aria-pressed': 'false', 'aria-keyshortcuts': 'F' } });
+  el.play.setAttribute('aria-keyshortcuts', 'Space');
   el.scrub = h('input', { class: 'scrub', type: 'range', min: '0', max: '0', step: '1', value: '0', 'aria-label': t('player.scrub') });
   el.scrub.addEventListener('input', () => {
     pause();
@@ -141,7 +146,7 @@ function buildShell() {
     schedule();
   }, { noTitle: true });
   el.liveBtn = btn('live-btn is-off', t('player.live'), [h('span', { class: 'live-dot' }), h('span', { text: t('player.live') })], () => followLive(), { noTitle: true });
-  el.player = h('div', { class: 'player', role: 'group', 'aria-label': t('player.label') }, el.prev, el.play, el.next, scrub.el, el.count, el.speed, el.liveBtn);
+  el.player = h('div', { class: 'player', role: 'group', 'aria-label': t('player.label') }, el.prev, el.play, el.next, el.focus, scrub.el, el.count, el.speed, el.liveBtn);
   el.dock = h('div', { class: 'dock', hidden: true }, el.caption, el.player);
 
   el.panel = h('aside', { class: 'panel', hidden: true, tabindex: '-1' });
@@ -156,6 +161,7 @@ function buildShell() {
     canPan: () => notes.tool() === 'select',
     inset: () => (ui.panel ? 384 : 0),
     onNode: (id) => openNode(id),
+    onUserMove: () => setFocus(false, false),
     onBackground: () => { if (!notes.deselect() && ui.panel && ui.panel.type === 'node') closePanel(); },
   });
   notes = createNotes(map, el.stage, {
@@ -458,6 +464,8 @@ function drawMap(refit) {
     }
   }
   map.setTopology(topo, { diff, refit: refit || shapeChanged });
+  // A big map shown whole has names too small to read: Focus comes on by itself, until the person chooses.
+  if (ui.focus === null || (lsGet('adk-lens.focus') === null && shapeChanged)) ui.focus = map.fitScale() < 0.62;
   notes.render();
 }
 
@@ -468,7 +476,10 @@ function renderRun(o = {}) {
   if (run) ui.idx = Math.max(0, Math.min(ui.idx, steps.length - 1));
   const comparing = ui.compare !== null;
   const frame = run && !comparing ? frameAt(run, ui.idx) : frameAt(null, -1);
-  map.setFrame(frame, { animate: o.animate !== false && ui.view === 'journey', duration: Math.min(900, 720 / ui.speed), follow: ui.view === 'journey' });
+  // The journey along a connector takes most of the step, so slow play stays one continuous movement.
+  map.setFrame(frame, { animate: o.animate !== false && ui.view === 'journey', duration: Math.max(260, Math.min(7200, 720 / ui.speed)), follow: ui.view === 'journey', focus: focusing() });
+  el.focus.setAttribute('aria-pressed', String(!!ui.focus));
+  el.focus.hidden = ui.view !== 'journey';
   el.story.hidden = ui.view !== 'linear' || !ui.app;
   el.dock.classList.toggle('in-story', ui.view === 'linear');
   story.update(run, ui.idx, { instant: o.instant, notes: o.notes, force: o.force });
@@ -498,13 +509,13 @@ function renderPlayer(o = {}) {
   const capKey = st ? [getLang(), run.id, st.id, t(sn.key, sn.vars), sn.body ? short(sn.body, 220) : ''].join('\u0001') : `none:${run.id}`;
   const back = renderPlayer.run === run.id && ui.idx < renderPlayer.idx;
   caption.set(capKey, () => (st ? [h('span', { class: 'cap-line' }, tn(sn.key, sn.vars)), sn.body ? h('span', { class: 'cap-body', text: short(sn.body, 220) }) : null] : null),
-    { tone: st ? st.kind : '', instant: !!o.scrub, back });
+    { tone: st ? (st.problem ? 'problem' : st.kind) : '', instant: !!o.scrub, back });
   const atEnd = ui.idx >= steps.length - 1;
   const waiting = ui.playing && atEnd && run.status === 'live';
   el.play.classList.toggle('is-playing', ui.playing);
   const playLabel = ui.playing ? t('player.pause') : atEnd && run.status !== 'live' ? t('player.replay') : t('player.play');
   el.play.setAttribute('aria-label', playLabel);
-  el.play.title = playLabel;
+  el.play.title = `${playLabel} (${t('key.space')})`;
   el.play.classList.toggle('is-waiting', waiting);
   el.prev.disabled = ui.idx <= 0;
   el.next.disabled = atEnd;
@@ -615,7 +626,7 @@ function play() {
   const run = currentRun();
   if (!run) return;
   const steps = stepsOf(run);
-  if (ui.idx >= steps.length - 1 && run.status !== 'live') setIdx(0, { animate: false });
+  if (ui.idx >= steps.length - 1 && run.status !== 'live') setIdx(0); // the message leaves again from the person
   if (run.status === 'live') ui.follow = true;
   ui.playing = true;
   renderPlayer();
@@ -670,6 +681,33 @@ function followLive() {
   selectRun(target.id, { at: target.status === 'live' ? 'end' : 'start', play: true });
 }
 
+// ---- Focus: the camera frames the step being played ----
+const focusing = () => !!ui.focus && ui.view === 'journey' && ui.compare === null;
+
+// The blocks of the current step: the one at work first, then the one it talks to.
+function focusIds() {
+  const run = currentRun();
+  if (!run) return [];
+  const f = frameAt(run, ui.idx);
+  const other = f.travel ? (f.travel.from === f.active ? f.travel.to : f.travel.from) : null;
+  return [f.active, other].filter(Boolean);
+}
+
+function focusNow(animated = true) {
+  if (!focusing()) return false;
+  const ids = focusIds();
+  return ids.length ? map.focusOn(ids, animated) : false;
+}
+
+// `chosen`: the person pressed the button (remembered). Taking the map in hand only lets go for now.
+function setFocus(on, chosen) {
+  if (!!ui.focus === on && !chosen) return;
+  ui.focus = on;
+  if (chosen) lsSet('adk-lens.focus', on ? '1' : '0');
+  if (el.focus) el.focus.setAttribute('aria-pressed', String(on));
+  if (on) focusNow();
+}
+
 function setView(v) {
   ui.view = v;
   lsSet('adk-lens.view', v);
@@ -677,7 +715,7 @@ function setView(v) {
   renderTop();
   renderBanner();
   renderRun({ animate: false, instant: true });
-  if (v === 'journey') requestAnimationFrame(() => map.fit());
+  if (v === 'journey') requestAnimationFrame(() => { if (!focusNow(false)) map.fit(); });
 }
 
 // ---------------------------------------------------------------- popovers
@@ -889,7 +927,7 @@ function closePanel(refocus) {
   map.select(null);
   if (refocus && was && was.type === 'node') { const n = map.nodeEl(was.id); if (n) n.focus({ preventScroll: true }); }
   if (refocus && was && was.type === 'prompt') el.copyBtn.focus({ preventScroll: true });
-  if (was && was.type !== 'node' && ui.view === 'journey') map.fit();
+  if (was && was.type !== 'node' && ui.view === 'journey' && !focusNow()) map.fit();
 }
 
 function panelHead(title, sub, ico) {
@@ -921,7 +959,7 @@ function openNode(id) {
   ui.panel = { type: 'node', id };
   renderPanel();
   map.select(id);
-  map.reveal(id);
+  if (focusing()) map.focusOn([id]); else map.reveal(id);
   el.panel.focus({ preventScroll: true });
 }
 
@@ -1008,7 +1046,7 @@ function refreshNodeComments(focusLast) {
 function openPromptPanel() {
   ui.panel = { type: 'prompt' };
   renderPanel();
-  if (ui.view === 'journey') map.fit(); // make room so the notes stay visible next to the panel
+  if (ui.view === 'journey' && !focusNow()) map.fit(); // make room so the notes stay visible next to the panel
   el.panel.focus({ preventScroll: true });
 }
 
@@ -1302,9 +1340,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     step(e.key === 'ArrowRight' ? 1 : -1);
   } else if (ui.view === 'journey' && ui.app) {
-    if (e.key === '+' || e.key === '=') map.zoomBy(1.25);
+    if (e.key.toLowerCase() === 'f' && ui.view === 'journey') setFocus(!ui.focus, true);
+    else if (e.key === '+' || e.key === '=') map.zoomBy(1.25);
     else if (e.key === '-') map.zoomBy(1 / 1.25);
-    else if (e.key === '0') map.fit();
+    else if (e.key === '0') { setFocus(false, false); map.fit(); }
   }
 });
 

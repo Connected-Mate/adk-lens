@@ -6,7 +6,7 @@ import { stepsOf } from './store.js';
 
 const TONE_ICON = {
   ask: 'user', agent: 'llm', think: 'llm', thought: 'llm', tool: 'tool', tool_result: 'tool', handoff: 'handoff',
-  memory: 'memory', file: 'doc', output: 'check', escalate: 'loop', answer: 'comment', done: 'check', error: 'warn',
+  memory: 'memory', file: 'doc', output: 'check', escalate: 'loop', answer: 'comment', pass: 'handoff', done: 'check', error: 'warn',
 };
 
 function argsShort(args) {
@@ -48,13 +48,15 @@ export function sentence(step) {
       const args = argsShort(ev.args);
       return args ? { key: 's.tool.args', vars: { agent, tool: step.tool, args } } : { key: 's.tool', vars: { agent, tool: step.tool } };
     }
-    case 'tool_result': return { key: step.agentTool ? 's.tool_result.agent' : 's.tool_result', vars: { tool: step.tool, agent }, body: bodyOf(ev.result), meta: fmtDuration(ev.duration_ms) };
+    case 'tool_result': if (step.problem) return { key: 's.tool_result.bad', vars: { tool: step.tool, agent }, body: bodyOf(ev.result), meta: fmtDuration(ev.duration_ms) };
+      return { key: step.agentTool ? 's.tool_result.agent' : 's.tool_result', vars: { tool: step.tool, agent }, body: bodyOf(ev.result), meta: fmtDuration(ev.duration_ms) };
     case 'handoff': return { key: 's.handoff', vars: { agent, target: step.target } };
     case 'memory': return { key: 's.memory', vars: { agent, keys: step.keys.join(', ') }, body: bodyOf(step.delta) };
     case 'file': return { key: 's.file', vars: { agent, files: step.files.join(', ') } };
     case 'output': return { key: 's.output', vars: { agent }, body: bodyOf(step.output) };
     case 'escalate': return { key: 's.escalate', vars: { agent } };
     case 'answer': return { key: 's.answer', vars: { agent }, body: step.text };
+    case 'pass': return { key: 's.pass', vars: { agent }, body: step.text };
     case 'done': if (step.interrupted) return { key: 's.interrupted', vars: {} };
       return ev.duration_ms ? { key: 's.done.d', vars: { d: fmtDuration(ev.duration_ms) } } : { key: 's.done', vars: {} };
     case 'error': {
@@ -164,8 +166,8 @@ export function createStory(root, opts) {
     const commentBtn = h('button', { class: 'st-comment', type: 'button', 'aria-label': t('story.comment.aria') }, icon('comment', 15), h('span', { text: t('story.comment') }));
     commentBtn.addEventListener('click', () => opts.onComment(step, i));
     const notes = h('div', { class: 'st-notes' });
-    const li = h('li', { class: `st tone-${step.kind}`, dataset: { i: String(i), id: step.id } },
-      h('span', { class: 'st-ico', 'aria-hidden': 'true' }, icon(step.interrupted ? 'warn' : TONE_ICON[step.kind] || 'custom', 17)),
+    const li = h('li', { class: `st tone-${step.kind}${step.problem ? ' is-problem' : ''}`, dataset: { i: String(i), id: step.id } },
+      h('span', { class: 'st-ico', 'aria-hidden': 'true' }, icon(step.interrupted || step.problem ? 'warn' : TONE_ICON[step.kind] || 'custom', 17)),
       h('div', { class: 'st-main' },
         h('div', { class: 'st-head' }, line, sn.meta ? h('span', { class: 'st-meta', text: sn.meta }) : null),
         body,

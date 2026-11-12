@@ -1,13 +1,17 @@
 // The whiteboard: draws a topology, pans, zooms and plays a run frame.
 import { h, s, clear, reducedMotion, put } from './dom.js';
 import { icon } from './icons.js';
-import { layout, freePath } from './layout.js';
+import { layout, freePath, MODEL, MEMORY } from './layout.js';
 import { USER } from './store.js';
 import { t } from './i18n.js';
 
 const GROUPS = new Set(['sequential', 'parallel', 'loop', 'workflow']);
 const EDGE_LABEL = { ask: 'edge.ask', delegate: 'edge.delegate', then: 'edge.then', again: 'edge.again', uses_agent: 'edge.uses_agent', wraps: 'edge.wraps' };
-const PAD = { top: 84, right: 40, bottom: 170, left: 84 };
+// Room kept free around the map: the tools on the left, and at the bottom the caption and the player,
+// which must never sit on the thing they explain.
+const PAD = { top: 84, right: 40, bottom: 216, left: 84 };
+const PAD_NARROW = { top: 70, right: 16, bottom: 190, left: 16 };
+const MAX_ZOOM = 2.4;
 
 export function createMap(stage, opts) {
   const world = h('div', { class: 'world' });
@@ -25,6 +29,7 @@ export function createMap(stage, opts) {
   let topo = null;
   const nodeEls = new Map();
   const edgeEls = new Map();
+  const baseEls = new Map();
   let userFitted = false;
   let travelRaf = 0;
   let lastFrameKey = '';
@@ -45,39 +50,92 @@ export function createMap(stage, opts) {
     for (const fn of viewListeners) fn(view);
   }
 
-  function smooth() {
-    if (reducedMotion()) return;
-    world.classList.add('smooth');
-    clearTimeout(smooth.t);
-    smooth.t = setTimeout(() => world.classList.remove('smooth'), 420);
+  // ----- camera -----
+  // Every camera move is one glide of the view itself (position and scale together, the dotted
+  // background with it). It starts from where the view is, so a new move can replace one under way.
+  let cam = 0;
+  function stopCam() {
+    cancelAnimationFrame(cam);
+    cam = 0;
+  }
+  function glide(to, ms = 480) {
+    stopCam();
+    if (reducedMotion() || ms <= 0 || (Math.abs(to.x - view.x) < 0.5 && Math.abs(to.y - view.y) < 0.5 && Math.abs(to.k - view.k) < 0.001)) {
+      view.x = to.x; view.y = to.y; view.k = to.k;
+      applyView();
+      return;
+    }
+    const r = stage.getBoundingClientRect();
+    const cx = r.width / 2, cy = r.height / 2;
+    const k0 = view.k;
+    // The point of the map under the centre of the screen moves in a straight line while the scale changes.
+    const c0 = { x: (cx - view.x) / view.k, y: (cy - view.y) / view.k };
+    const c1 = { x: (cx - to.x) / to.k, y: (cy - to.y) / to.k };
+    const t0 = performance.now();
+    const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+    const tick = (now) => {
+      const p = Math.min(1, (now - t0) / ms);
+      const e = ease(p);
+      view.k = k0 * Math.pow(to.k / k0, e);
+      view.x = cx - (c0.x + (c1.x - c0.x) * e) * view.k;
+      view.y = cy - (c0.y + (c1.y - c0.y) * e) * view.k;
+      if (p >= 1) { view.x = to.x; view.y = to.y; view.k = to.k; }
+      applyView();
+      cam = p < 1 ? requestAnimationFrame(tick) : 0;
+    };
+    cam = requestAnimationFrame(tick);
+  }
+
+  function safeArea(r) {
+    const narrow = r.width < 720;
+    const inset = !narrow && opts.inset ? opts.inset() : 0;
+    const pad = narrow ? PAD_NARROW : { ...PAD, right: PAD.right + inset };
+    return { narrow, pad, w: r.width - pad.left - pad.right, h: r.height - pad.top - pad.bottom };
   }
 
   function fit(animated = true) {
     const r = stage.getBoundingClientRect();
     if (!r.width || !lay.width) return;
-    const narrow = r.width < 720;
-    const inset = !narrow && opts.inset ? opts.inset() : 0;
-    const pad = narrow ? { top: 70, right: 16, bottom: 150, left: 16 } : { ...PAD, right: PAD.right + inset };
-    const k = Math.min((r.width - pad.left - pad.right) / lay.width, (r.height - pad.top - pad.bottom) / Math.max(lay.height, 1), 1.1);
+    const { narrow, pad, w, h } = safeArea(r);
     // Always show the whole map, phones included: seeing every agent matters more than the size of the letters
-    // (pinch or + to read closer). Only a really huge map is left to scroll sideways.
-    view.k = Math.max(narrow ? 0.2 : 0.08, k);
-    const free = r.width - pad.left - pad.right - lay.width * view.k;
-    view.x = free >= 0 ? pad.left + free / 2 : pad.left;
-    view.y = pad.top + (r.height - pad.top - pad.bottom - lay.height * view.k) / 2;
-    if (animated) smooth();
-    applyView();
+    // (Focus, pinch or + to read closer). Only a really huge map is left to scroll sideways.
+    const k = Math.max(narrow ? 0.2 : 0.08, Math.min(w / lay.width, h / Math.max(lay.height, 1), 1.1));
+    const free = w - lay.width * k;
+    glide({ k, x: free >= 0 ? pad.left + free / 2 : pad.left, y: pad.top + (h - lay.height * k) / 2 }, animated ? 480 : 0);
   }
 
-  function zoomAt(factor, cx, cy) {
+  // Frame a few blocks (the one at work and the one it talks to) so that their names read comfortably.
+  function focusOn(ids, animated = true) {
+    const r = stage.getBoundingClientRect();
+    const bs = ids.map((id) => lay.boxes.get(id)).filter(Boolean);
+    if (!r.width || !bs.length) return false;
+    const { narrow, pad, w, h } = safeArea(r);
+    const box = (list) => {
+      const x1 = Math.min(...list.map((b) => b.x)), y1 = Math.min(...list.map((b) => b.y));
+      return { x: x1, y: y1, w: Math.max(...list.map((b) => b.x + b.w)) - x1, h: Math.max(...list.map((b) => b.y + b.h)) - y1 };
+    };
+    const lo = narrow ? 0.55 : 0.85, hi = narrow ? 1 : 1.2;
+    let bb = box(bs);
+    const scale = (b) => Math.min(w / (b.w + 72), h / (b.h + 56));
+    // Too far apart to read both: stay on the one at work.
+    if (scale(bb) < lo && bs.length > 1) bb = box([bs[0]]);
+    const k = Math.max(lo, Math.min(hi, scale(bb)));
+    // A block bigger than the screen (a wide frame) is shown from its start.
+    const x = bb.w * k > w ? pad.left + 20 - bb.x * k : pad.left + (w - bb.w * k) / 2 - bb.x * k;
+    const y = bb.h * k > h ? pad.top + 12 - bb.y * k : pad.top + (h - bb.h * k) / 2 - bb.y * k;
+    userFitted = true;
+    // A long way to go takes a little longer, so the eye can follow.
+    const far = Math.hypot(x - view.x, y - view.y);
+    glide({ k, x, y }, animated ? Math.max(520, Math.min(1000, 440 + far * 0.3)) : 0);
+    return true;
+  }
+
+  function zoomAt(factor, cx, cy, ms = 0) {
     const r = stage.getBoundingClientRect();
     const px = cx === undefined ? r.width / 2 : cx - r.left;
     const py = cy === undefined ? r.height / 2 : cy - r.top;
-    const k = Math.min(3, Math.max(0.06, view.k * factor));
-    view.x = px - ((px - view.x) / view.k) * k;
-    view.y = py - ((py - view.y) / view.k) * k;
-    view.k = k;
-    applyView();
+    const k = Math.min(MAX_ZOOM, Math.max(0.06, view.k * factor));
+    glide({ k, x: px - ((px - view.x) / view.k) * k, y: py - ((py - view.y) / view.k) * k }, ms);
   }
 
   function toWorld(clientX, clientY) {
@@ -97,16 +155,13 @@ export function createMap(stage, opts) {
     const x1 = b.x * view.k + view.x, y1 = b.y * view.k + view.y;
     const x2 = x1 + b.w * view.k, y2 = y1 + b.h * view.k;
     let dx = 0, dy = 0;
-    const narrow = r.width < 720;
-    // Same margins as fit() on a phone, so a map that fits is never nudged around while it plays.
-    const m = narrow ? { x: 10, top: 62, bottom: 140 } : { x: 60, top: 80, bottom: 160 };
-    const right = r.width - m.x - (!narrow && opts.inset ? opts.inset() : 0);
-    if (x1 < m.x) dx = m.x - x1; else if (x2 > right) dx = right - x2;
+    // Inside the margins of fit(), so a map that fits is never nudged around while it plays.
+    const { pad } = safeArea(r);
+    const m = { left: pad.left - 24, right: pad.right - 6, top: pad.top - 8, bottom: pad.bottom - 10 };
+    if (x1 < m.left) dx = m.left - x1; else if (x2 > r.width - m.right) dx = r.width - m.right - x2;
     if (y1 < m.top) dy = m.top - y1; else if (y2 > r.height - m.bottom) dy = r.height - m.bottom - y2;
     if (!dx && !dy) return;
-    view.x += dx; view.y += dy;
-    smooth();
-    applyView();
+    glide({ k: view.k, x: view.x + dx, y: view.y + dy }, 420);
   }
 
   // ----- drawing -----
@@ -186,6 +241,17 @@ export function createMap(stage, opts) {
       nodeEls.set(n.id, el);
     }
 
+    // What the app stands on.
+    baseEls.clear();
+    for (const b of lay.bases || []) {
+      const el = h('div', { class: `base k-${b.kind}`, role: 'img', 'aria-label': t(`base.${b.kind}.aria`, { text: b.text }), title: b.text, dataset: { id: b.id } },
+        h('span', { class: 'base-ico' }, icon(b.kind === 'model' ? 'chip' : 'memory', 17)),
+        h('span', { class: 'node-txt' }, h('span', { class: 'base-name', text: t(`base.${b.kind}`) }), h('span', { class: 'base-sub', text: b.text })));
+      place(el, lay.boxes.get(b.id));
+      put(nodeLayer, el);
+      baseEls.set(b.id, el);
+    }
+
     for (const e of lay.edges) {
       const status = diff ? diff.edges.get(e.key) : null;
       const g = s('g', { class: `edge k-${e.kind}${status ? ` d-${status}` : ''}` });
@@ -197,7 +263,7 @@ export function createMap(stage, opts) {
         if (len > 12) {
           const p2 = path.getPointAtLength(len), p1 = path.getPointAtLength(len - 6);
           const ang = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI;
-          put(g, s('path', { class: 'edge-head', d: 'M-9 -5 L0 0 L-9 5', transform: `translate(${p2.x} ${p2.y}) rotate(${ang})` }));
+          put(g, s('path', { class: 'edge-head', d: 'M-8 -4.500 L0 0 L-8 4.500 Z', transform: `translate(${p2.x} ${p2.y}) rotate(${ang})` }));
         }
       }
       const labelKey = e.label ? null : EDGE_LABEL[e.kind];
@@ -211,7 +277,7 @@ export function createMap(stage, opts) {
     }
     if (o.refit) userFitted = false; // a new map (other app, other version): show all of it again
     if (!userFitted) fit(false);
-    applyView();
+    else applyView();
   }
 
   function findEdge(from, to) {
@@ -239,14 +305,25 @@ export function createMap(stage, opts) {
         put(el, tag);
       } else if (err === undefined && tag) tag.remove();
       if (err !== undefined) el.title = err; else el.removeAttribute('title');
+      // A tool that came back saying no (refused, an error in its result): marked, but not a failure of the request.
+      const warn = err === undefined ? frame.warns.get(id) : undefined;
+      el.classList.toggle('is-warn', warn !== undefined);
+      let wtag = el.querySelector(':scope > .warn-tag');
+      if (warn !== undefined && !wtag) put(el, h('span', { class: 'warn-tag', title: warn }, icon('warn', 12), h('span', { text: t('node.problem') })));
+      else if (warn === undefined && wtag) wtag.remove();
     }
+    const model = baseEls.get(MODEL), memory = baseEls.get(MEMORY);
+    if (model) model.classList.toggle('is-busy', hasRun && frame.kind === 'think');
+    if (memory) memory.classList.toggle('is-on', hasRun && frame.memory);
     for (const [key, { g, label }] of edgeEls) {
       const [a, b] = key.split('>');
       const visited = frame.edges.has(key) || frame.edges.has(`${b}>${a}`);
       const active = !!frame.travel && ((frame.travel.from === a && frame.travel.to === b) || (frame.travel.from === b && frame.travel.to === a));
       g.classList.toggle('is-visited', visited);
       g.classList.toggle('is-active', active);
+      g.classList.toggle('is-back', active && frame.travel.from === b); // the dashes run the way the request goes
       if (label) label.classList.toggle('is-visited', visited);
+      if (label) label.classList.toggle('is-active', active);
     }
     const key = frame.step ? frame.step.id : '';
     const changed = key !== lastFrameKey;
@@ -259,7 +336,13 @@ export function createMap(stage, opts) {
         void el.offsetWidth;
         el.classList.add('flash');
       }
-      if (o.follow !== false) ensureVisible(frame.active);
+      if (o.focus) focusOn([frame.active, frame.travel && (frame.travel.from === frame.active ? frame.travel.to : frame.travel.from)].filter(Boolean));
+      else if (o.follow !== false) ensureVisible(frame.active);
+    }
+    if (changed && memory && frame.kind === 'memory' && !reducedMotion()) {
+      memory.classList.remove('flash');
+      void memory.offsetWidth;
+      memory.classList.add('flash');
     }
     // The same step drawn again (a live request refreshes at every event): the journey under way goes on.
     if (!changed) return;
@@ -348,6 +431,11 @@ export function createMap(stage, opts) {
   }
 
   // ----- pan & zoom -----
+  // The person took the map in hand: it stays where they put it (and Focus lets go).
+  function moved() {
+    userFitted = true;
+    if (opts.onUserMove) opts.onUserMove();
+  }
   const pointers = new Map();
   let drag = null;
   let pinch = null;
@@ -357,6 +445,7 @@ export function createMap(stage, opts) {
     if (opts.canPan && !opts.canPan()) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     stage.setPointerCapture(e.pointerId);
+    stopCam();
     if (pointers.size === 1) {
       drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false };
       stage.classList.add('is-panning');
@@ -372,12 +461,13 @@ export function createMap(stage, opts) {
     if (pinch && pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
+      moved();
       zoomAt((pinch.k * (d / pinch.d)) / view.k, (a.x + b.x) / 2, (a.y + b.y) / 2);
     } else if (drag) {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
       view.x = drag.vx + dx; view.y = drag.vy + dy;
-      userFitted = true;
+      if (drag.moved) moved();
       applyView();
     }
   });
@@ -396,7 +486,8 @@ export function createMap(stage, opts) {
   stage.addEventListener('wheel', (e) => {
     if (e.target.closest('textarea, .note-bar')) return;
     e.preventDefault();
-    userFitted = true;
+    stopCam();
+    moved();
     if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
     else {
       view.x -= e.deltaX; view.y -= e.deltaY;
@@ -424,8 +515,16 @@ export function createMap(stage, opts) {
     world, notesSvg, notesHtml,
     setTopology, setFrame, select, toWorld, centerWorld,
     fit: () => { userFitted = false; fit(true); },
-    zoomBy: (f) => { userFitted = true; smooth(); zoomAt(f); },
+    zoomBy: (f) => { moved(); zoomAt(f, undefined, undefined, 260); },
     reveal: ensureVisible,
+    focusOn,
+    // The scale at which the whole map fits: tells whether its names can be read without Focus.
+    fitScale: () => {
+      const r = stage.getBoundingClientRect();
+      if (!r.width || !lay.width) return 1;
+      const { w, h } = safeArea(r);
+      return Math.min(w / lay.width, h / Math.max(lay.height, 1), 1.1);
+    },
     box: (id) => lay.boxes.get(id),
     boxes: () => lay.boxes,
     nodeEl: (id) => nodeEls.get(id),

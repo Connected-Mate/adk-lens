@@ -9,7 +9,11 @@ const TOOLS = new Set(['tool', 'toolset']);
 const AG = { w: 208, h: 72 };
 const TL = { w: 172, h: 38, gap: 10, perCol: 6, indent: 26 };
 const US = { w: 196, h: 72 };
-const GAP_X = 132;
+const GAP_X = 168; // room for the trunk of a fan of connectors, and for a label on each branch
+const TRUNK = 36;
+const BASE = { h: 50, gap: 10 }; // what an app stands on: its model, its session memory
+export const MODEL = '@model';
+export const MEMORY = '@memory';
 const GAP_Y = 34;
 const PAD = 26;
 const HEAD = 46;
@@ -24,6 +28,14 @@ export function layout(topo) {
   }
   const orderOf = new Map();
   for (const e of topo.edges) if (typeof e.order === 'number') orderOf.set(`${e.from}>${e.to}`, e.order);
+
+  // The foundations, shown once under the first agent: the model the agents think with (when they all share one)
+  // and the session memory (when some agent writes to it).
+  const models = [...new Set(topo.nodes.map((n) => n.model).filter(Boolean).map(String))];
+  const keys = [...new Set(topo.nodes.map((n) => n.output_key).filter(Boolean).map(String))];
+  const bases = [];
+  if (models.length === 1) bases.push({ id: MODEL, kind: 'model', text: models[0] });
+  if (keys.length) bases.push({ id: MEMORY, kind: 'memory', text: keys.join(', ') });
 
   const seen = new Set();
   const synth = []; // arrows we add inside groups ("then", "again")
@@ -80,6 +92,13 @@ export function layout(topo) {
       selfW = Math.max(selfW, tb.w);
       selfH = AG.h + 16 + tb.h;
     }
+    if (node.id === topo.root) {
+      for (const b of bases) {
+        items.push({ id: b.id, type: 'base', x: 0, y: selfH + (selfH === AG.h ? 22 : 18), w: aw, h: BASE.h });
+        selfH += (selfH === AG.h ? 22 : 18) + BASE.h;
+      }
+    }
+    self.bw = selfW; // connectors leave beyond the tools, never through them
     items.push(self);
     if (!agents.length) return { w: selfW, h: selfH, ay: AG.h / 2, items };
     const blocks = agents.map((a) => block(a.id));
@@ -113,9 +132,9 @@ export function layout(topo) {
       const ch = blocks.reduce((sum, p) => sum + p.b.h, 0) + GAP_Y * (blocks.length - 1);
       cols.push({ blocks, x, cw, ch });
       innerH = Math.max(innerH, ch);
-      x += cw + (node.kind === 'workflow' ? GAP_X : 96);
+      x += cw + (node.kind === 'workflow' ? 132 : 88);
     }
-    const innerW = x - (node.kind === 'workflow' ? GAP_X : 96) - PAD;
+    const innerW = x - (node.kind === 'workflow' ? 132 : 88) - PAD;
     const single = cols.every((c) => c.blocks.length === 1);
     const maxAy = single ? Math.max(...cols.map((c) => c.blocks[0].b.ay)) : 0;
     for (const c of cols) {
@@ -138,7 +157,7 @@ export function layout(topo) {
       hgt += tb.h + PAD;
       w = Math.max(w, tb.w + PAD * 2);
     }
-    items.unshift({ id: node.id, type: 'group', x: 0, y: 0, w, h: hgt });
+    items.unshift({ id: node.id, type: 'group', x: 0, y: 0, w, h: hgt, ay: single ? HEAD + maxAy : hgt / 2 });
     return { w, h: hgt, ay: single ? HEAD + maxAy : hgt / 2, items };
   }
 
@@ -212,51 +231,61 @@ export function layout(topo) {
     }
     push(e.from, e.to, e.kind, e.label ? { label: String(e.label) } : {});
   }
-  return { boxes, edges, width: Math.max(width, x0 + AG.w), height };
+  return { boxes, edges, bases: bases.filter((b) => boxes.has(b.id)), width: Math.max(width, x0 + AG.w), height };
 }
 
+// A path made of straight runs with small rounded elbows.
+function ortho(pts, r = 9) {
+  const p = pts.filter((q, i) => !i || q[0] !== pts[i - 1][0] || q[1] !== pts[i - 1][1]);
+  let d = `M${p[0][0]} ${p[0][1]}`;
+  for (let i = 1; i < p.length - 1; i++) {
+    const [ax, ay] = p[i - 1], [cx, cy] = p[i], [bx, by] = p[i + 1];
+    const inL = Math.hypot(cx - ax, cy - ay), outL = Math.hypot(bx - cx, by - cy);
+    const k = Math.min(r, inL / 2, outL / 2);
+    if (k < 0.5) { d += ` L${cx} ${cy}`; continue; }
+    d += ` L${cx - ((cx - ax) / inL) * k} ${cy - ((cy - ay) / inL) * k} Q${cx} ${cy} ${cx + ((bx - cx) / outL) * k} ${cy + ((by - cy) / outL) * k}`;
+  }
+  const e = p[p.length - 1];
+  return `${d} L${e[0]} ${e[1]}`;
+}
+
+// Connectors are drawn like on an architecture diagram: horizontal and vertical runs only.
+// Several connectors leaving the same block share one vertical trunk, and each one carries its label
+// on its own last run, so labels never pile up.
 function route(a, b, kind, extra, boxes) {
   const acx = a.x + a.w / 2, acy = a.y + a.h / 2, bcx = b.x + b.w / 2, bcy = b.y + b.h / 2;
   // Agent -> its tool chip, first column: a tidy elbow along the left side.
   if (kind === 'uses_tool' && b.type === 'tool' && b.col === 0 && b.y >= a.y + a.h) {
-    const x = a.x + 12, r = 10;
-    const d = `M${x} ${a.y + a.h} V${bcy - r} Q${x} ${bcy} ${x + r} ${bcy} H${b.x}`;
-    return { d, lx: x, ly: bcy };
+    const x = a.x + 12;
+    return { d: ortho([[x, a.y + a.h], [x, bcy], [b.x, bcy]], 8), lx: x, ly: bcy };
   }
   if (extra.under && boxes.get(extra.under)) {
     // Loop "again" arrow: under the members, inside the frame.
+    // It goes round the members (out by the right of the last, back in by the left of the first), clear of their tools.
     const g = boxes.get(extra.under);
     const yb = g.y + g.h - 22;
-    const d = `M${acx} ${a.y + a.h} C${acx} ${yb + 14} ${acx - 30} ${yb} ${acx - 60} ${yb} H${bcx + 60} C${bcx + 30} ${yb} ${bcx} ${yb + 14} ${bcx} ${b.y + b.h}`;
-    return { d, lx: (acx + bcx) / 2, ly: yb };
+    const xr = a.x + a.w + 13, xl = b.x - 13;
+    return { d: ortho([[a.x + a.w, acy], [xr, acy], [xr, yb], [xl, yb], [xl, bcy], [b.x, bcy]], 10), lx: (xr + xl) / 2, ly: yb };
   }
-  // Frames are entered at the height of the other end, so connectors stay calm.
-  const anchorY = (box, other) => (box.type === 'group'
-    ? Math.max(box.y + HEAD + 20, Math.min(other.y + other.h / 2, box.y + box.h - 26))
-    : box.y + box.h / 2);
-  let p, q, c1, c2;
+  // A frame is entered on the line its members stand on.
+  const anchorY = (box) => (box.type === 'group' ? box.y + (box.ay || box.h / 2) : box.y + box.h / 2);
   if (b.x >= a.x + a.w - 8) {
-    p = [a.x + a.w, anchorY(a, b)]; q = [b.x, anchorY(b, a)];
-    const k = Math.max(36, (q[0] - p[0]) * 0.5);
-    c1 = [p[0] + k, p[1]]; c2 = [q[0] - k, q[1]];
-  } else if (b.x + b.w <= a.x + 8) {
-    p = [a.x, anchorY(a, b)]; q = [b.x + b.w, anchorY(b, a)];
-    const k = Math.max(36, (p[0] - q[0]) * 0.5);
-    c1 = [p[0] - k, p[1]]; c2 = [q[0] + k, q[1]];
-  } else if (bcy >= acy) {
-    p = [acx, a.y + a.h]; q = [bcx, b.y];
-    const k = Math.max(30, (q[1] - p[1]) * 0.5);
-    c1 = [p[0], p[1] + k]; c2 = [q[0], q[1] - k];
-  } else {
-    p = [acx, a.y]; q = [bcx, b.y + b.h];
-    const k = Math.max(30, (p[1] - q[1]) * 0.5);
-    c1 = [p[0], p[1] - k]; c2 = [q[0], q[1] + k];
+    const p = [a.x + a.w, anchorY(a)], q = [b.x, anchorY(b)];
+    if (Math.abs(p[1] - q[1]) < 1) return { d: ortho([p, q]), lx: (p[0] + q[0]) / 2, ly: p[1] };
+    const tx = Math.min(Math.max(a.x + (a.bw || a.w) + TRUNK, p[0] + 16), q[0] - 20);
+    return { d: ortho([p, [tx, p[1]], [tx, q[1]], q]), lx: (tx + q[0]) / 2 + 2, ly: q[1] };
   }
-  const d = `M${p[0]} ${p[1]} C${c1[0]} ${c1[1]} ${c2[0]} ${c2[1]} ${q[0]} ${q[1]}`;
-  // Midpoint of the cubic, for the label.
-  const lx = (p[0] + 3 * c1[0] + 3 * c2[0] + q[0]) / 8;
-  const ly = (p[1] + 3 * c1[1] + 3 * c2[1] + q[1]) / 8;
-  return { d, lx, ly };
+  if (b.x + b.w <= a.x + 8) {
+    const p = [a.x, anchorY(a)], q = [b.x + b.w, anchorY(b)];
+    if (Math.abs(p[1] - q[1]) < 1) return { d: ortho([p, q]), lx: (p[0] + q[0]) / 2, ly: p[1] };
+    const tx = Math.max(p[0] - TRUNK, q[0] + 20);
+    return { d: ortho([p, [tx, p[1]], [tx, q[1]], q]), lx: (tx + q[0]) / 2 - 2, ly: q[1] };
+  }
+  const down = bcy >= acy;
+  const p = [acx, down ? a.y + a.h : a.y], q = [bcx, down ? b.y : b.y + b.h];
+  if (Math.abs(p[0] - q[0]) < 1) return { d: ortho([p, q]), lx: p[0], ly: (p[1] + q[1]) / 2 };
+  const my = (p[1] + q[1]) / 2;
+  return { d: ortho([p, [p[0], my], [q[0], my], q]), lx: (p[0] + q[0]) / 2, ly: my };
 }
 
 // A free path between two boxes, for journeys that have no drawn connector.
