@@ -4,7 +4,7 @@ import { icon } from './icons.js';
 import { initLang, setLang, getLang, t, tn, tp } from './i18n.js';
 import {
   store, loadState, applyShapes, ingest, isEmpty, resetStore, runsOf, stepsOf, frameAt, nodeActivity,
-  withExtras, diffTopologies, unionTopology, USER,
+  withExtras, diffTopologies, unionTopology, currentVersion, USER,
 } from './store.js';
 import { createMap } from './map.js';
 import { createStory, sentence, sentenceText } from './story.js';
@@ -193,18 +193,21 @@ function buildShell() {
 
 const currentRun = () => (ui.runId ? store.runs.get(ui.runId) : null);
 const versionsOf = (app) => store.versions[app] || [];
-const latestVersion = (app) => { const l = versionsOf(app); return l.length ? l[l.length - 1] : null; };
+const latestVersion = (app) => currentVersion(app);
 
 function shownVersion() {
   const list = versionsOf(ui.app);
   if (!list.length) return null;
-  if (ui.version !== null) return list.find((v) => v.v === ui.version) || list[list.length - 1];
+  if (ui.version !== null) return list.find((v) => v.v === ui.version) || latestVersion(ui.app);
   const run = currentRun();
   if (run && run.startTs) {
-    const before = list.filter((v) => v.ts && v.ts <= run.startTs + 0.5);
-    if (before.length) return before[before.length - 1];
+    // The version in use when the request started: the one that became current last before it
+    // (`ts` = first seen, `seen` = the last time the app came back to that shape).
+    let best = null, at = 0;
+    for (const v of list) for (const when of [v.ts, v.seen]) if (when && when <= run.startTs + 0.5 && when > at) { best = v; at = when; }
+    if (best) return best;
   }
-  return list[list.length - 1];
+  return latestVersion(ui.app);
 }
 
 function shownTopology() {

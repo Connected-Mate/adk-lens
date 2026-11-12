@@ -72,9 +72,17 @@ export function applyShapes(state) {
   for (const [app, list] of Object.entries(obj(st.versions))) {
     store.versions[app] = arr(list)
       .filter((v) => v && typeof v === 'object')
-      .map((v, i) => ({ v: Number(v.v) || i + 1, ts: Number(v.ts) || 0, hash: str(v.hash), topology: cleanTopology(v.topology, app) }));
-    if (!store.apps[app] && store.versions[app].length) store.apps[app] = store.versions[app][store.versions[app].length - 1].topology;
+      .map((v, i) => ({ v: Number(v.v) || i + 1, ts: Number(v.ts) || 0, seen: Number(v.seen) || 0, current: !!v.current, hash: str(v.hash), topology: cleanTopology(v.topology, app) }));
+    // The current version is not always the newest: an app can go back to a shape it already had.
+    const cur = Number(obj(st.current)[app]) || 0;
+    if (cur) for (const v of store.versions[app]) v.current = v.v === cur;
+    if (!store.apps[app] && store.versions[app].length) store.apps[app] = currentVersion(app).topology;
   }
+}
+
+export function currentVersion(app) {
+  const list = store.versions[app] || [];
+  return list.find((v) => v.current) || list[list.length - 1] || null;
 }
 
 export function isEmpty() {
@@ -103,10 +111,15 @@ export function ingest(ev, bulk = false) {
       // Keep a local version list until the hub's own list is fetched again.
       const list = store.versions[app] || (store.versions[app] = []);
       const sig = JSON.stringify([topo.nodes, topo.edges]);
-      const last = list[list.length - 1];
-      if (!last || JSON.stringify([last.topology.nodes, last.topology.edges]) !== sig) {
-        list.push({ v: (last ? last.v : 0) + 1, ts: Number(ev.ts) || Date.now() / 1000, hash: '', topology: topo });
+      const now = Number(ev.ts) || Date.now() / 1000;
+      // A shape already seen is that version again, not a new one.
+      let hit = list.find((v) => (ev.version ? v.v === Number(ev.version) : JSON.stringify([v.topology.nodes, v.topology.edges]) === sig));
+      if (!hit) {
+        hit = { v: Number(ev.version) || list.reduce((m, v) => Math.max(m, v.v), 0) + 1, ts: now, hash: '', topology: topo };
+        list.push(hit);
       }
+      hit.seen = now;
+      for (const v of list) v.current = v === hit;
     }
     return { topology: app };
   }
