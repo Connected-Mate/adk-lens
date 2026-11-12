@@ -32,12 +32,14 @@
   "features": [
     { "title": { "fr": "Ça se branche, ça ne casse rien", "en": "Plugs in, breaks nothing" },
       "text": { "fr": "Lance adk-lens web à la place de adk web. Ton code d'agent ne change pas.", "en": "Run adk-lens web instead of adk web. Your agent code does not change." } },
-    { "title": { "fr": "Regarde, puis rejoue", "en": "Watch, then replay" },
-      "text": { "fr": "Deux vues de chaque exécution : le trajet du prompt sur la carte, ou l'histoire en mots simples.", "en": "Two views of every run: the prompt's journey on the map, or the story in plain words." } },
+    { "title": { "fr": "Regarde, puis rejoue pas à pas", "en": "Watch, then replay step by step" },
+      "text": { "fr": "Suis le trajet du prompt sur la carte, ou lis l'histoire en mots simples. Avec le zoom sur chaque étape (touche F), le tableau cadre ce qui se passe : espace ou les flèches pour avancer et reculer, aussi lentement que tu veux.", "en": "Follow the prompt on the map, or read the story in plain words. Focus mode (key F) frames each step: space or the arrow keys take you forward and back, as slowly as you like." } },
     { "title": { "fr": "Entoure, commente, questionne", "en": "Circle, comment, ask" },
       "text": { "fr": "Annote le tableau, puis copie le tout en un clic comme prompt pour ton agent de code.", "en": "Annotate the board, then copy it all in one click as a prompt for your coding agent." } },
     { "title": { "fr": "Compare les versions", "en": "Compare versions" },
-      "text": { "fr": "Chaque changement de ton système d'agents est gardé. Mets deux versions côte à côte.", "en": "Every change to your agent system is kept. Put two versions side by side." } }
+      "text": { "fr": "Chaque changement de ton système d'agents est gardé. Mets deux versions côte à côte.", "en": "Every change to your agent system is kept. Put two versions side by side." } },
+    { "title": { "fr": "Vois tes contrôles de sécurité agir", "en": "See your safety checks at work" },
+      "text": { "fr": "Un bouclier signale chaque agent qui a ses propres contrôles. Quand l'un d'eux arrête une demande ou nettoie la réponse d'un outil, le tableau l'affiche comme une étape.", "en": "A shield marks each agent that has its own checks. When one stops a request or cleans what a tool returned, the board shows it as a step." } }
   ],
   "video_pending": true,
   "agent_setup": {
@@ -68,7 +70,9 @@
     { "q": { "fr": "Est-ce que ça modifie mon code d'agent ?", "en": "Does it change my agent code?" },
       "a": { "fr": "Non. ADK Lens se pose par-dessus ADK. Pour l'enlever : adk-lens stop, adk-lens off, puis pip uninstall adk-lens.", "en": "No. ADK Lens sits on top of ADK. To remove it: adk-lens stop, adk-lens off, then pip uninstall adk-lens." } },
     { "q": { "fr": "Faut-il une clé d'API pour essayer ?", "en": "Do I need an API key to try it?" },
-      "a": { "fr": "Non. adk-lens demo tourne avec un faux modèle, sans clé.", "en": "No. adk-lens demo runs with a fake model, no key needed." } },
+      "a": { "fr": "Non. adk-lens demo tourne avec un faux modèle, sans clé. Envie d'un cas plus corsé ? adk-lens demo hard joue un guichet de gare avec 15 agents, sur des données inventées.", "en": "No. adk-lens demo runs with a fake model, no key needed. Want more to look at? adk-lens demo hard plays a station desk with 15 agents, on invented data." } },
+    { "q": { "fr": "Quels contrôles de sécurité est-ce que je vois ?", "en": "Which safety checks does it show?" },
+      "a": { "fr": "Ceux que tes agents portent eux-mêmes, sous forme de callbacks ADK. Tu vois quand l'un d'eux arrête une demande ou modifie la réponse d'un outil. Une limite : un contrôle qui bloque un outil avant son appel ne se voit pas.", "en": "The ones your agents carry themselves, as ADK callbacks. You see when one stops a request or changes what a tool returned. One limit: a check that blocks a tool before it is called does not show." } },
     { "q": { "fr": "Où vont mes données ?", "en": "Where does my data go?" },
       "a": { "fr": "Nulle part : le tableau tourne sur ta machine, à l'adresse 127.0.0.1:4790. Ce site n'a ni cookie ni traceur.", "en": "Nowhere: the board runs on your machine, at 127.0.0.1:4790. This site has no cookies and no trackers." } },
     { "q": { "fr": "C'est un produit Google ?", "en": "Is this a Google product?" },

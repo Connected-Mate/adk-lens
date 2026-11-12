@@ -282,6 +282,11 @@ ul, ol { padding: 0; list-style: none; }
 .versions .sheet { padding: 16px; display: grid; gap: 10px; justify-items: start; }
 .versions .chip { height: 30px; padding: 0 10px; font-size: 12.5px; max-width: 100%; }
 .chip--new { border-color: var(--green); color: var(--green); }
+.card--d { background: radial-gradient(120% 90% at 50% 110%, color-mix(in srgb, var(--green) 16%, transparent), transparent 60%), var(--surface); }
+.chip--shield { justify-self: start; border-radius: 8px; border-color: color-mix(in srgb, var(--green) 55%, transparent); }
+.chip--shield svg, .check svg { flex: none; color: var(--green); }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.45; color: var(--ink-2); }
+.check svg { margin-top: 3px; } .check b { font-weight: 550; color: var(--ink); }
 
 /* real screenshots: one frame, one tab per picture; shown only when the files exist */
 .shots { display: grid; gap: clamp(20px, 3vw, 36px); padding-bottom: clamp(72px, 10vw, 140px); }
@@ -314,6 +319,7 @@ ul, ol { padding: 0; list-style: none; }
 .manual__cmd { width: 100%; display: grid; gap: 6px; padding: 16px 20px; border-radius: var(--r-lg); background: var(--bg); border: 1px solid var(--line); text-align: left; }
 .manual__cmd code { font: 400 13.5px/1.5 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
 .manual__cmd code::before { content: "$ "; color: var(--ink-2); }
+.manual__more { text-align: center; } .manual__more code { font: 400 13.5px/1.5 var(--mono); color: var(--ink); white-space: nowrap; }
 
 /* open source + coffee: the dark block */
 .night { margin-inline: var(--m); padding: clamp(40px, 7vw, 96px) clamp(24px, 5vw, 72px); border-radius: var(--r-xl); background-color: var(--night); color: #fff; display: grid; gap: 24px; position: relative; overflow: hidden; isolation: isolate; }
@@ -385,8 +391,8 @@ ul, ol { padding: 0; list-style: none; }
 
   /* board: one dot follows the prompt */
   .b-dot { offset-rotate: 0deg; animation: travel 7s cubic-bezier(.45, .05, .35, 1) infinite; }
-  .b-dot--a { offset-path: path("M230 224 L290 224 L440 216 C475 216 465 116 500 116 L595 116 L595 190"); }
-  .b-dot--b { offset-path: path("M230 224 L290 224 L440 232 C475 232 465 336 500 336"); animation-delay: 3.5s; }
+  .b-dot--a { offset-path: path("M230 224 H462 Q470 224 470 216 V124 Q470 116 478 116 H595 V190"); }
+  .b-dot--b { offset-path: path("M230 224 H462 Q470 224 470 232 V328 Q470 336 478 336 H500"); animation-delay: 3.5s; }
   @keyframes travel { 0% { offset-distance: 0%; opacity: 0; } 5% { opacity: 1; } 42% { opacity: 1; } 50%, 100% { offset-distance: 100%; opacity: 0; } }
 
   /* playable board: the active agent breathes, the dot glows */
@@ -413,6 +419,9 @@ ul, ol { padding: 0; list-style: none; }
   .chip--btn { animation: press 5s var(--ease) infinite; }
   @keyframes press { 0%, 70%, 100% { transform: scale(1); } 76% { transform: scale(.94); } 84% { transform: scale(1); } }
   .chip--new { animation: appear 5s var(--ease) infinite; }
+  .chip--shield { animation: guard 5s var(--ease) infinite; }
+  @keyframes guard { 0%, 20%, 100% { box-shadow: 0 0 0 0 transparent; } 30%, 80% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 22%, transparent); } }
+  .card--d .sheet { animation: appear 5s var(--ease) infinite; }
   @keyframes appear { 0%, 18% { opacity: 0; transform: scale(.9); } 30%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; transform: scale(.9); } }
 
   /* scroll: visuals zoom into place; text is never hidden */
@@ -434,7 +443,7 @@ ul, ol { padding: 0; list-style: none; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: .01ms !important; }
-  .b-dot--a { offset-path: path("M230 224 L290 224 L440 216 C475 216 465 116 500 116 L595 116 L595 190"); offset-distance: 58%; offset-rotate: 0deg; }
+  .b-dot--a { offset-path: path("M230 224 H462 Q470 224 470 216 V124 Q470 116 478 116 H595 V190"); offset-distance: 58%; offset-rotate: 0deg; }
   .b-dot--b { display: none; }
   .rot { height: auto; padding: 10px 18px; border-radius: var(--r-lg); max-width: 100%; }
   .rot__list { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 2px 18px; }

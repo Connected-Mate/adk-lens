@@ -148,9 +148,18 @@
   }
   function edgePath(a, b, lay) {
     var s = lay.at[a], t = lay.at[b];
-    if (layoutName === 'wide') { var mx = (s[0] + t[0]) / 2; return 'M' + s[0] + ' ' + s[1] + ' C' + mx + ' ' + s[1] + ' ' + mx + ' ' + t[1] + ' ' + t[0] + ' ' + t[1]; }
+    // Right-angle links with a small rounded corner, like the real board.
+    var dx = t[0] - s[0], dy = t[1] - s[1], sx = dx < 0 ? -1 : 1, sy = dy < 0 ? -1 : 1;
+    var r = Math.min(10, Math.abs(dx) / 2, Math.abs(dy) / 2);
+    if (r < 1) return 'M' + s[0] + ' ' + s[1] + ' L' + t[0] + ' ' + t[1];
+    if (layoutName === 'wide') {
+      var mx = (s[0] + t[0]) / 2;
+      return 'M' + s[0] + ' ' + s[1] + ' H' + (mx - sx * r) + ' Q' + mx + ' ' + s[1] + ' ' + mx + ' ' + (s[1] + sy * r) +
+        ' V' + (t[1] - sy * r) + ' Q' + mx + ' ' + t[1] + ' ' + (mx + sx * r) + ' ' + t[1] + ' H' + t[0];
+    }
     var my = (s[1] + t[1]) / 2;
-    return 'M' + s[0] + ' ' + s[1] + ' C' + s[0] + ' ' + my + ' ' + t[0] + ' ' + my + ' ' + t[0] + ' ' + t[1];
+    return 'M' + s[0] + ' ' + s[1] + ' V' + (my - sy * r) + ' Q' + s[0] + ' ' + my + ' ' + (s[0] + sx * r) + ' ' + my +
+      ' H' + (t[0] - sx * r) + ' Q' + t[0] + ' ' + my + ' ' + t[0] + ' ' + (my + sy * r) + ' V' + t[1];
   }
   function buildMap() {
     var want = root.getBoundingClientRect().width < 620 ? 'tall' : 'wide';
@@ -167,8 +176,8 @@
     Object.keys(NODES).forEach(function (id) {
       var n = NODES[id], c = lay.at[id], w = nodeWidth(id, lay), h = n.kind === 'tool' ? lay.nh - 6 : lay.nh;
       var g = svg('g', { 'class': 'p-node p-node--' + n.kind, transform: 'translate(' + c[0] + ' ' + c[1] + ')' });
-      g.appendChild(svg('rect', { 'class': 'p-halo', x: -w / 2 - 6, y: -h / 2 - 6, width: w + 12, height: h + 12, rx: h / 2 + 6 }));
-      g.appendChild(svg('rect', { 'class': 'p-box', x: -w / 2, y: -h / 2, width: w, height: h, rx: h / 2 }));
+      g.appendChild(svg('rect', { 'class': 'p-halo', x: -w / 2 - 6, y: -h / 2 - 6, width: w + 12, height: h + 12, rx: 13 }));
+      g.appendChild(svg('rect', { 'class': 'p-box', x: -w / 2, y: -h / 2, width: w, height: h, rx: 8 }));
       var t = svg('text', { 'text-anchor': 'middle', y: (n.kind === 'tool' ? lay.tool : lay.font) * 0.34, 'font-size': n.kind === 'tool' ? lay.tool : lay.font });
       t.textContent = n.label; g.appendChild(t);
       if (n.kind !== 'you') {

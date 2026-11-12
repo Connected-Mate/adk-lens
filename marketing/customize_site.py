@@ -39,13 +39,15 @@ T = {
         "statement": "ADK Lens plugs on top of ADK and draws what your agents do, live. Nothing to change in your agent code.",
         "story": ["You ask for a weekend plan.", "concierge hands over to weather_agent.", "weather_agent calls get_weather.", "planner writes the answer."],
         "note": "Why the weather first?", "as_prompt": "Copy as prompt",
+        "check": ["The safety check ", "screen_prompt", " stopped the request."], "harder": "Want more to look at? Then run",
         "shots_title": "The real thing", "shots_tabs": "Screenshots",
         "copy_fail": "Your browser blocked the copy.", "copy_fail_link": "Open the setup guide",
         "manual": "No coding agent? Do it by hand", "manual_copy": "Copy the two commands", "manual_copied": "Commands copied", "manual_live": "Commands copied. Paste them into your terminal.",
         "shots": [
-            ("shot-map.png", "ADK Lens screenshot: the map of agents and tools.", "The map of your agents and tools.", "The map"),
+            ("shot-map.png", "ADK Lens screenshot: the map of agents and tools, drawn as straight blocks and right-angle arrows.", "The map of your agents and tools, drawn like an architecture diagram.", "The map"),
             ("shot-linear.png", "ADK Lens screenshot: the Story view of a run.", "A run, told in plain words.", "The story"),
             ("shot-notes.png", "ADK Lens screenshot: notes on the board.", "Your notes, ready to copy as a prompt.", "The notes"),
+            ("shot-checks.png", "ADK Lens screenshot: on the harder demo, a safety check stopped a request and the board shows it as a step.", "A safety check stops a request, and you see it.", "The checks"),
         ],
         "setup_title": "Set it up with your coding agent",
         "setup_text": "Copy the prompt and paste it into your coding agent, in your project folder. It finds your ADK project and puts ADK Lens on top. No ADK project yet? It offers to create your first agent.",
@@ -74,13 +76,15 @@ T = {
         "statement": "ADK Lens se branche sur ADK et dessine en direct ce que font tes agents. Rien à changer dans ton code.",
         "story": ["Tu demandes un programme de week-end.", "concierge passe la main à weather_agent.", "weather_agent appelle get_weather.", "planner rédige la réponse."],
         "note": "Pourquoi la météo d'abord ?", "as_prompt": "Copier comme prompt",
+        "check": ["Le contrôle de sécurité ", "screen_prompt", " a arrêté la demande."], "harder": "Envie d'un cas plus corsé ? Lance ensuite",
         "shots_title": "En vrai", "shots_tabs": "Captures d'écran",
         "copy_fail": "Ton navigateur a bloqué la copie.", "copy_fail_link": "Ouvrir le guide d'installation",
         "manual": "Pas d'agent de code ? Fais-le à la main", "manual_copy": "Copier les deux commandes", "manual_copied": "Commandes copiées", "manual_live": "Commandes copiées. Colle-les dans ton terminal.",
         "shots": [
-            ("shot-map.png", "Capture d'ADK Lens : la carte des agents et des outils.", "La carte de tes agents et de tes outils.", "La carte"),
+            ("shot-map.png", "Capture d'ADK Lens : la carte des agents et des outils, en blocs droits et flèches à angle droit.", "La carte de tes agents et de tes outils, dessinée comme un schéma d'architecture.", "La carte"),
             ("shot-linear.png", "Capture d'ADK Lens : la vue Récit d'une exécution.", "Une exécution, racontée en mots simples.", "Le récit"),
             ("shot-notes.png", "Capture d'ADK Lens : des notes sur le tableau.", "Tes notes, prêtes à copier comme prompt.", "Les notes"),
+            ("shot-checks.png", "Capture d'ADK Lens : dans la démo corsée, un contrôle de sécurité a arrêté une demande et le tableau l'affiche comme une étape.", "Un contrôle de sécurité arrête une demande, et tu le vois.", "Les contrôles"),
         ],
         "setup_title": "Installe-le avec ton agent de code",
         "setup_text": "Copie le prompt et colle-le dans ton agent de code, dans le dossier de ton projet. Il trouve ton projet ADK et pose ADK Lens par-dessus. Pas encore de projet ADK ? Il te propose de créer ton premier agent.",
@@ -133,6 +137,7 @@ def copy_button(lang: str, prompt: str, label: str, cls: str = "btn btn--primary
             f'<span class="is-idle">{e(label)}</span><span class="is-done" aria-hidden="true">{e(t["copied"])}</span></button>')
 
 
+SHIELD = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8.3-7 10-4.1-1.7-7-5.4-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>'
 MANUAL = ['pip install "git+https://github.com/Connected-Mate/adk-lens"', "adk-lens demo"]
 
 
@@ -141,6 +146,7 @@ def manual(lang: str) -> str:
     t = T[lang]
     lines = "".join(f"<code>{e(c)}</code>" for c in MANUAL)
     return (f'<details class="manual"><summary>{e(t["manual"])}</summary><div class="manual__in"><div class="manual__cmd">{lines}</div>'
+            f'<p class="manual__more">{e(t["harder"])} <code>adk-lens demo hard</code></p>'
             f'<button class="btn btn--soft btn--sm" type="button" data-copy="{e(chr(10).join(MANUAL))}" data-copied="{e(t["manual_live"])}">'
             f'<span class="is-idle">{e(t["manual_copy"])}</span><span class="is-done" aria-hidden="true">{e(t["manual_copied"])}</span></button></div></details>')
 
@@ -149,18 +155,18 @@ def board_svg(lang: str) -> str:
     t = T[lang]
     return f"""<svg viewBox="0 0 720 440" role="img" aria-label="{e(t['board_label'])}">
   <path class="b-line" d="M230 224 H290"/>
-  <path class="b-line" d="M440 216 C475 216 465 116 500 116"/>
-  <path class="b-line" d="M440 232 C475 232 465 336 500 336"/>
+  <path class="b-line" d="M440 224 H462 Q470 224 470 216 V124 Q470 116 478 116 H500"/>
+  <path class="b-line" d="M440 224 H462 Q470 224 470 232 V328 Q470 336 478 336 H500"/>
   <path class="b-line" d="M595 142 V190" stroke-dasharray="2 5"/>
   <circle class="b-dot b-dot--a" r="6"/>
   <circle class="b-dot b-dot--b" r="6"/>
   <text class="b-tag" x="24" y="186">{e(t['you'])}</text>
-  <g class="b-node b-node--you"><rect x="20" y="198" width="210" height="52" rx="26"/><text x="125" y="230" text-anchor="middle">{e(t['prompt'])}</text></g>
+  <g class="b-node b-node--you"><rect x="20" y="198" width="210" height="52" rx="8"/><text x="125" y="230" text-anchor="middle">{e(t['prompt'])}</text></g>
   <text class="b-tag" x="294" y="186">{e(t['agent'])}</text>
-  <g class="b-node"><rect x="290" y="198" width="150" height="52" rx="26"/><text x="365" y="230" text-anchor="middle">concierge</text></g>
-  <g class="b-node"><rect x="500" y="90" width="190" height="52" rx="26"/><text x="595" y="122" text-anchor="middle">weather_agent</text></g>
-  <g class="b-node b-node--tool"><rect x="520" y="190" width="150" height="44" rx="22"/><text x="595" y="217" text-anchor="middle">get_weather</text></g>
-  <g class="b-node"><rect x="500" y="310" width="140" height="52" rx="26"/><text x="570" y="342" text-anchor="middle">planner</text></g>
+  <g class="b-node"><rect x="290" y="198" width="150" height="52" rx="8"/><text x="365" y="230" text-anchor="middle">concierge</text></g>
+  <g class="b-node"><rect x="500" y="90" width="190" height="52" rx="8"/><text x="595" y="122" text-anchor="middle">weather_agent</text></g>
+  <g class="b-node b-node--tool"><rect x="520" y="190" width="150" height="44" rx="6"/><text x="595" y="217" text-anchor="middle">get_weather</text></g>
+  <g class="b-node"><rect x="500" y="310" width="140" height="52" rx="8"/><text x="570" y="342" text-anchor="middle">planner</text></g>
   <g class="b-note" transform="rotate(-3 135 350)"><rect x="50" y="306" width="170" height="92" rx="3"/><text x="68" y="344">{e(t['sticky'][0])}</text><text x="68" y="366">{e(t['sticky'][1])}</text></g>
 </svg>"""
 
@@ -178,9 +184,11 @@ def rows(lang: str) -> str:
         '<div class="sheet"><span class="caption">v1</span><span class="chip"><i></i>concierge</span><span class="chip chip--amber"><i></i>planner</span></div>'
         '<div class="sheet"><span class="caption">v2</span><span class="chip"><i></i>concierge</span><span class="chip chip--amber"><i></i>planner</span><span class="chip chip--green chip--new"><i></i>weather_agent</span></div>'
         '</div></div>',
+        f'<div class="card card--d zoom" aria-hidden="true"><div class="card__in"><span class="chip chip--shield">{SHIELD}station_desk</span>'
+        f'<div class="sheet"><p class="check">{SHIELD}<span>{e(t["check"][0])}<b>{e(t["check"][1])}</b>{e(t["check"][2])}</span></p></div></div></div>',
     ]
     out = []
-    for feat, visual in zip(f[1:4], visuals):
+    for feat, visual in zip(f[1:5], visuals):
         out.append(f"""  <article class="row">
     <div class="row__text"><h2 class="h2">{e(feat['title'][lang])}</h2><p class="body">{e(feat['text'][lang])}</p></div>
     {visual}
