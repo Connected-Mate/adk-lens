@@ -10,6 +10,33 @@ from typing import Any
 from .serialize import clip
 
 
+_HOOKS = ("before_agent", "after_agent", "before_model", "after_model", "on_model_error",
+          "before_tool", "after_tool", "on_tool_error")
+
+
+def _guards(node: Any) -> list[dict]:
+    """The agent's own callbacks (checks, filters, safety guards): when they run and their name.
+
+    Only reads the function's name and the first line of its docstring; never calls it.
+    """
+    out: list[dict] = []
+    for hook in _HOOKS:
+        try:
+            found = getattr(node, hook + "_callback", None)
+        except Exception:
+            found = None
+        if not found:
+            continue
+        for fn in found if isinstance(found, (list, tuple)) else [found]:
+            name = getattr(fn, "__name__", None) or type(fn).__name__
+            item = {"when": hook, "name": str(name)}
+            doc = (getattr(fn, "__doc__", None) or "").strip().split("\n")[0]
+            if doc:
+                item["about"] = clip(doc, 200)
+            out.append(item)
+    return out[:24]
+
+
 def _kind_of(node: Any) -> str:
     names = {c.__name__ for c in type(node).__mro__}
     if "SequentialAgent" in names:
@@ -119,6 +146,9 @@ def build(root: Any, app_name: str) -> dict:
                 info["output_key"] = str(node.output_key)
             if getattr(node, "mode", None):
                 info["mode"] = str(node.mode)
+        guards = _guards(node)
+        if guards:
+            info["guards"] = guards
         if kind == "loop" and getattr(node, "max_iterations", None):
             info["max_iterations"] = node.max_iterations
         nodes.append(info)

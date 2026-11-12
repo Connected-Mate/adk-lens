@@ -42,10 +42,15 @@ def shape_hash(topo: dict) -> str:
     """Fingerprint of the structure only: which nodes (id, name, kind, parent) and which edges.
 
     It does not look at instructions, descriptions or model names, so it is the same
-    with and without ADK_LENS_CONTENT=0.
+    with and without ADK_LENS_CONTENT=0. An agent's guards (its own callbacks: when and
+    name) are part of the structure; a node without any keeps the fingerprint it always had.
     """
+    def guards(node: dict) -> list:
+        found = sorted(f"{g.get('when')}:{g.get('name')}" for g in node.get("guards") or [] if isinstance(g, dict))
+        return [found] if found else []
+
     nodes = sorted(
-        [str(n.get("id")), str(n.get("name")), str(n.get("kind")), str(n.get("parent"))]
+        [str(n.get("id")), str(n.get("name")), str(n.get("kind")), str(n.get("parent")), *guards(n)]
         for n in topo.get("nodes") or [] if isinstance(n, dict)
     )
     edges = sorted(

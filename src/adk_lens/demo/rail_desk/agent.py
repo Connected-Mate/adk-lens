@@ -28,7 +28,7 @@ from google.adk.tools import ToolContext, exit_loop
 from google.adk.tools.agent_tool import AgentTool
 from google.genai import types
 
-from . import services
+from . import armor, services
 
 PACE = 1.2  # seconds of "thinking", so the whiteboard is watchable
 DESK_ADDRESS = "desk@example.com"
@@ -478,6 +478,7 @@ site_reader = LlmAgent(
     instruction="[site] Read the station web site with fetch_page. Start at the address you are given, "
                 "follow the links you need, then answer from what the pages say.",
     tools=[fetch_page],
+    after_tool_callback=armor.screen_page,
 )
 
 delay_monitor = LlmAgent(
@@ -565,6 +566,7 @@ notifier = LlmAgent(
     description="E-mails the passenger the confirmation of the new seat.",
     instruction="[notifier] Send the passenger a confirmation of the held seat with send_email.\nHELD SEAT: {held_seat?}\nEND",
     tools=[send_email],
+    before_tool_callback=armor.screen_recipient,
     output_key="confirmation",
     **_STAYS,
 )
@@ -582,6 +584,7 @@ announcer = LlmAgent(
     instruction="[announcer] List the train's passengers, e-mail each of them, and when an address is refused "
                 "leave a note at the desk instead. Report what was sent.",
     tools=[list_passengers, send_email, leave_desk_note],
+    before_tool_callback=armor.screen_recipient,
     disallow_transfer_to_peers=True,
 )
 
@@ -595,4 +598,5 @@ root_agent = LlmAgent(
                 "Station web site: {site_url?}\n",
     sub_agents=[timetable_agent, disruption_watch, rebooking_flow, announcer],
     tools=[AgentTool(agent=site_reader)],
+    before_model_callback=armor.screen_prompt,
 )

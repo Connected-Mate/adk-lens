@@ -739,14 +739,14 @@ def test_hard_demo_plays_every_request_and_the_board_sees_it_all(fresh):
 
     # 1. Each request ends as the script says.
     asked = out["requests"]
-    assert [r["question"] for r in asked] == [q for q, _ in demo.HARD_REQUESTS] and len(asked) == 8
+    assert [r["question"] for r in asked] == [q for q, _ in demo.HARD_REQUESTS] and len(asked) == 9
     said = [" ".join(text for _, text in r["answers"]) for r in asked]
-    assert [bool(r["error"]) for r in asked] == [False] * 7 + [True]
+    assert [bool(r["error"]) for r in asked] == [False] * 8 + [True]
     assert "6605 at 08:10" in said[0] and "6609 at 09:10" in said[0]
     assert "12 minutes late" in said[1]
     assert asked[2]["session"] == asked[1]["session"], "the follow-up is asked in the same conversation"
     assert "Train 6607 leaves from platform 2" in said[2]  # no train number in the question: memory
-    assert len({r["session"] for r in asked}) == 7
+    assert len({r["session"] for r in asked}) == 8
     assert asked[3]["answers"][-1][0] == "station_desk"
     assert "next to platform 1" in said[3] and "Sunday: 09:00 to 17:00" in said[3]
     assert asked[4]["answers"][-1][0] == "briefing_writer"
@@ -755,7 +755,10 @@ def test_hard_demo_plays_every_request_and_the_board_sees_it_all(fresh):
     assert asked[5]["answers"][-1] == ("notifier", "You are rebooked: train 6618 at 10:40, coach 3, seat 14C. "
                                        "A confirmation was e-mailed to maya.ortiz@example.com.")
     assert "2 e-mails delivered" in said[6] and "550 mailbox unknown" in said[6] and "note for Tom Brandt" in said[6]
-    assert asked[7]["error"].startswith("TimetableUnavailable") and not asked[7]["answers"]
+    # the request that tries to override the rules is stopped by the desk's own guard: no mail, no tool
+    assert asked[7]["answers"] == [("station_desk", "I can't help with that. The desk's safety check stopped this "
+                                    "request (prompt injection): I only follow the station's own rules.")]
+    assert asked[8]["error"].startswith("TimetableUnavailable") and not asked[8]["answers"]
 
     # 2. Real work: pages fetched over HTTP, mail sent over SMTP (three accepted in all, one refused).
     assert out["pages"] == ["/", "/lost-property.html", "/opening-hours.html"]
@@ -785,8 +788,8 @@ def test_hard_demo_plays_every_request_and_the_board_sees_it_all(fresh):
     assert {e["app"] for e in events} == {"rail_desk"}
     runs = [e["run"] for e in events if e["type"] == "run_start"]
     endings = [e for e in events if e["type"] in ("run_end", "run_error")]
-    assert len(runs) == 8 and [e["run"] for e in endings] == runs
-    assert [e["type"] for e in endings] == ["run_end"] * 7 + ["run_error"]
+    assert len(runs) == 9 and [e["run"] for e in endings] == runs
+    assert [e["type"] for e in endings] == ["run_end"] * 8 + ["run_error"]
     assert not any(e.get("interrupted") for e in endings) and "Saltmarsh" in endings[-1]["error"]
     assert {e["run"] for e in events} == set(runs)
 
@@ -801,7 +804,7 @@ def test_hard_demo_plays_every_request_and_the_board_sees_it_all(fresh):
         "search_trains": 3, "get_live_status": 3, "site_reader": 1, "fetch_page": 3, "list_delays": 1,
         "list_notices": 1, "try_hold_seat": 3, "exit_loop": 1, "send_email": 4, "list_passengers": 1,
         "leave_desk_note": 1}
-    assert len([e for e in events if e["type"] == "model_start"]) == len([e for e in events if e["type"] == "model_end"]) == 41
+    assert len([e for e in events if e["type"] == "model_start"]) == len([e for e in events if e["type"] == "model_end"]) == 42
     # every tool call is closed (old ADK versions say nothing about the one that raises)
     assert len([e for e in events if e["type"] == "tool_end"]) == len(tools) - 1
     # the agent used as a tool works inside the request that called it
@@ -818,7 +821,24 @@ def test_hard_demo_plays_every_request_and_the_board_sees_it_all(fresh):
     assert [e["agent"] for e in of(5, "agent_start")].count("seat_picker") == 3
     assert {"delay_monitor", "notice_monitor"} <= {e["agent"] for e in of(4, "agent_start")}
     if _adk_has("on_tool_error_callback"):
-        assert [e["tool"] for e in of(7, "tool_error")] == ["search_trains"]
+        assert [e["tool"] for e in of(8, "tool_error")] == ["search_trains"]
+
+    # 5. The agents' own guards (plain ADK callbacks) are on the map, and what they did is in the story.
+    guards = {n["name"]: [(g["when"], g["name"]) for g in n["guards"]] for n in topo["nodes"] if n.get("guards")}
+    assert guards == {"station_desk": [("before_model", "screen_prompt")], "site_reader": [("after_tool", "screen_page")],
+                      "notifier": [("before_tool", "screen_recipient")], "announcer": [("before_tool", "screen_recipient")]}
+    # the guard answered in the model's place: the model call is closed and marked, nothing else ran
+    stopped = of(7, "model_end")
+    assert len(stopped) == 1 and stopped[0]["guarded"] is True and "safety check" in stopped[0]["text"]
+    assert not of(7, "tool_start") and [e["agent"] for e in of(7, "agent_start")] == ["station_desk"]
+    assert [e for e in events if e["type"] == "model_end" and e.get("guarded")] == stopped
+    # the page guard removed the hidden instruction: the board has both what the tool gave and what the agent got
+    changed = [e for e in events if e["type"] == "guard"]
+    assert len(changed) == 1 and (changed[0]["when"], changed[0]["tool"], changed[0]["agent"]) == (
+        "after_tool", "fetch_page", "site_reader")
+    assert changed[0]["result"]["safety_check"]["removed_lines"] == 1 and "ignore your" not in changed[0]["result"]["text"]
+    given = next(e for e in events if e["type"] == "tool_end" and e["call_id"] == changed[0]["call_id"])
+    assert "ignore your previous instructions" in given["result"]["text"]
 
 
 def test_hard_demo_stops_its_services_when_interrupted():
@@ -917,3 +937,35 @@ def test_agent_used_as_a_tool_on_old_adk_stays_inside_its_request(monkeypatch):
     autoload._attach(NS(plugin_manager=NS(plugins=[lens], register_plugin=lambda p: None), app=None, agent=reader,
                         app_name="reader"))
     assert [e["app"] for e in sent if e["type"] == "topology"] == ["reader"]
+
+
+def test_adding_a_guard_to_an_agent_makes_a_new_version(hub):
+    """Only the agent changes (a callback is added): the board must notice by itself."""
+    from google.adk.agents import LlmAgent
+
+    from adk_lens import topology
+    from adk_lens.demo.trip_demo import agent
+    from adk_lens.hub import shape_hash
+    from adk_lens.serialize import redact
+
+    def check_prompt(callback_context, llm_request):
+        """Refuses what the desk must not answer."""
+        return None
+
+    def build(**extra):
+        return LlmAgent(name="guarded_app", model=agent._model, instruction="be brief", **extra)
+
+    plain = topology.build(build(), "guarded_app")
+    guarded = topology.build(build(before_model_callback=check_prompt), "guarded_app")
+    node = guarded["nodes"][0]
+    assert "guards" not in plain["nodes"][0]
+    assert node["guards"] == [{"when": "before_model", "name": "check_prompt", "about": "Refuses what the desk must not answer."}]
+    assert shape_hash(plain) != shape_hash(guarded)
+    # private mode keeps when and name (identifiers), not the description
+    assert redact({"type": "topology", **guarded})["nodes"][0]["guards"] == [{"when": "before_model", "name": "check_prompt"}]
+
+    h = {"X-ADK-Lens": "1"}
+    for topo in (plain, guarded):
+        _req(hub, "POST", "/api/ingest", {"events": [{"type": "topology", "app": "guarded_app", **topo}]}, h)
+    assert [v["v"] for v in _state(hub)["versions"]["guarded_app"]][-2:] in ([1, 2], [2, 1])
+    assert len(_state(hub)["versions"]["guarded_app"]) == 2

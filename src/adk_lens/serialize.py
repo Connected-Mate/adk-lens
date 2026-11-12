@@ -113,9 +113,16 @@ _KEEP = {
     "duration_ms", "tokens_in", "tokens_out", "messages", "finish", "final", "partial",
     "transfer_to", "escalate", "author", "root", "root_agent", "error_type", "nested",
     "agent_tool", "path", "branch", "event_id", "state_keys", "source", "interrupted", "reason",
+    "guarded", "guard_when", "when",
 }
 _KEEP_NODE = {"id", "name", "kind", "cls", "parent", "model", "output_key", "mode", "max_iterations", "prefix"}
 _KEEP_EDGE = {"from", "to", "kind", "order", "label"}
+
+
+def _guard_names(node: dict) -> dict:
+    """Guards without their description: when they run and the function's name."""
+    guards = [{"when": g.get("when"), "name": g.get("name")} for g in node.get("guards") or [] if isinstance(g, dict)]
+    return {"guards": guards} if guards else {}
 
 
 def redact(event: dict) -> dict:
@@ -128,7 +135,8 @@ def redact(event: dict) -> dict:
         slim["tools"] = [t for t in event["tools"] if isinstance(t, str)]
     if event.get("type") == "topology":
         slim["nodes"] = [
-            {k: v for k, v in n.items() if k in _KEEP_NODE} for n in event.get("nodes") or [] if isinstance(n, dict)
+            {**{k: v for k, v in n.items() if k in _KEEP_NODE}, **_guard_names(n)}
+            for n in event.get("nodes") or [] if isinstance(n, dict)
         ]
         slim["edges"] = [
             {k: v for k, v in e.items() if k in _KEEP_EDGE} for e in event.get("edges") or [] if isinstance(e, dict)

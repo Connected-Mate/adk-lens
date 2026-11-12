@@ -18,6 +18,7 @@ from .serialize import clip, parts_of, safe, text_of
 from .transport import emit
 
 PLUGIN_NAME = "adk_lens"
+_MISSING = object()
 
 
 def _quiet(fn):
@@ -45,6 +46,7 @@ class LensPlugin(BasePlugin):
         self._started: dict[tuple, float] = {}
         self._model_seq = 0
         self._model_open: dict[tuple, list] = {}
+        self._tool_results: dict[str, Any] = {}   # tool call id -> result as the tool gave it
         self._open: dict[str, tuple[str, str]] = {}  # run id -> (app, session) until its end is reported
         self._default_app: str | None = None  # app of the last runner the lens was attached to
 
@@ -233,7 +235,37 @@ class LensPlugin(BasePlugin):
                 out["artifacts"] = [str(k) for k in list(artifacts)[:40]]
         if getattr(event, "error_message", None) or getattr(event, "error_code", None):
             out["error"] = clip(getattr(event, "error_message", None) or getattr(event, "error_code", ""), 2000)
+        if not partial:
+            self._guard_effects(invocation_context, out, parts)
         emit(out)
+
+    def _guard_effects(self, invocation_context, out: dict, parts: list) -> None:
+        """What the agent's own callbacks did, seen from the outside.
+
+        - A model call still open when the agent's answer arrives: a before-model callback
+          answered in the model's place (ADK then skips the model and our after-model hook).
+        - A tool result that differs from what the tool gave: an after-tool callback changed it
+          (ADK runs plugins before the agent's own callbacks, so we saw the original).
+        """
+        author = out.get("author")
+        for key in [k for k in self._model_open if k[1] == author and self._run(k[0]) == out.get("run")]:
+            for call_id in self._model_open.pop(key, []):
+                emit({"type": "model_end", "app": out["app"], "session": out["session"], "run": out["run"],
+                      "agent": author, "call_id": call_id, "parts": parts,
+                      "text": "\n".join(p["text"] for p in parts if p.get("kind") == "text"), "calls": [],
+                      "guarded": True, "guard_when": "before_model",
+                      "duration_ms": self._took(("model", call_id))})
+        for part in parts:
+            if part.get("kind") != "result" or part.get("id") is None:
+                continue
+            original = self._tool_results.pop(str(part["id"]), _MISSING)
+            given = part.get("response")
+            # ADK wraps a result that is not a dict as {"result": ...}: that is not a change.
+            if original is _MISSING or original == given or {"result": original} == given:
+                continue
+            emit({"type": "guard", "app": out["app"], "session": out["session"], "run": out["run"],
+                  "agent": author, "when": "after_tool", "tool": part.get("name"), "call_id": str(part["id"]),
+                  "result": part.get("response")})
 
     # -- agents ------------------------------------------------------------
     @_quiet
@@ -353,6 +385,9 @@ class LensPlugin(BasePlugin):
     async def after_tool_callback(self, *, tool, tool_args, tool_context, result) -> None:
         self._tool_over(tool, tool_context)
         call_id = self._call_id(tool, tool_context)
+        if len(self._tool_results) > 500:
+            self._tool_results.clear()
+        self._tool_results[call_id] = safe(result)
         emit(self._base(tool_context, "tool_end",
                         agent=getattr(tool_context, "agent_name", None),
                         tool=getattr(tool, "name", None), call_id=call_id,

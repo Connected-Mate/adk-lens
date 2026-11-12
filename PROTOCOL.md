@@ -107,7 +107,7 @@ The hub keeps up to 30 versions per app (saved in `~/.adk-lens/versions.json`). 
 - `ts`: when this version was first seen. `seen`: when it last became the current one.
 - `hash`: fingerprint of everything on the map (structure, instructions, descriptions, models).
   Two versions of one app never share a `hash`.
-- `shape`: fingerprint of the structure only (node `id`, `name`, `kind`, `parent`; edge `from`, `to`, `kind`, `order`).
+- `shape`: fingerprint of the structure only (node `id`, `name`, `kind`, `parent`, and its guards when it has any; edge `from`, `to`, `kind`, `order`).
 - `current`: `true` on exactly one version per app. **The current version is not always the last of the list**:
   use this flag (or `state.current["<app>"]`), not the position.
 - `content: false` (optional): this version was recorded with the privacy switch, its topology has no texts.
@@ -138,3 +138,19 @@ what the step returned. The last segment of `path`, without `@n`, is the name of
 
 When an agent is used as a tool, its steps are reported inside the parent run (same `run` id), between the parent's
 `tool_start` (with `agent_tool: true`) and `tool_end`. Its `agent_start` has `nested: true`.
+
+## Guards (the agent's own callbacks)
+
+An agent node that has ADK callbacks of its own (`before_model_callback`, `after_tool_callback`, ...) carries
+`guards`: a list of `{"when": "before_model", "name": "<function name>", "about": "<first docstring line>"}`.
+Adding or removing one makes a new version. With `ADK_LENS_CONTENT=0` only `when` and `name` are sent.
+
+What a guard did, as far as it can be seen from outside:
+
+| Event | Fields | Meaning |
+|---|---|---|
+| `model_end` with `guarded: true` | `guard_when: "before_model"`, `text`, `parts` | A before-model callback answered in the model's place; the model was not called. |
+| `guard` | `when: "after_tool"`, `agent`, `tool`, `call_id`, `result` | An after-tool callback changed the tool's result. `result` is what the agent received; the `tool_end` with the same `call_id` has what the tool gave. |
+
+A before-tool callback that answers in the tool's place is not visible: ADK then calls neither the tool nor the
+plugins' after-tool hook, so the board shows the call and the result the agent received.
