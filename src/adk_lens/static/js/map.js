@@ -54,8 +54,9 @@ export function createMap(stage, opts) {
     const inset = !narrow && opts.inset ? opts.inset() : 0;
     const pad = narrow ? { top: 70, right: 16, bottom: 150, left: 16 } : { ...PAD, right: PAD.right + inset };
     const k = Math.min((r.width - pad.left - pad.right) / lay.width, (r.height - pad.top - pad.bottom) / Math.max(lay.height, 1), 1.1);
-    // On a phone a wide map would be unreadable: keep it legible and let it scroll sideways.
-    view.k = Math.max(narrow ? 0.5 : 0.08, k);
+    // Always show the whole map, phones included: seeing every agent matters more than the size of the letters
+    // (pinch or + to read closer). Only a really huge map is left to scroll sideways.
+    view.k = Math.max(narrow ? 0.2 : 0.08, k);
     const free = r.width - pad.left - pad.right - lay.width * view.k;
     view.x = free >= 0 ? pad.left + free / 2 : pad.left;
     view.y = pad.top + (r.height - pad.top - pad.bottom - lay.height * view.k) / 2;
@@ -91,9 +92,12 @@ export function createMap(stage, opts) {
     const x1 = b.x * view.k + view.x, y1 = b.y * view.k + view.y;
     const x2 = x1 + b.w * view.k, y2 = y1 + b.h * view.k;
     let dx = 0, dy = 0;
-    const right = r.width - 60 - (r.width >= 720 && opts.inset ? opts.inset() : 0);
-    if (x1 < 60) dx = 60 - x1; else if (x2 > right) dx = right - x2;
-    if (y1 < 80) dy = 80 - y1; else if (y2 > r.height - 160) dy = r.height - 160 - y2;
+    const narrow = r.width < 720;
+    // Same margins as fit() on a phone, so a map that fits is never nudged around while it plays.
+    const m = narrow ? { x: 10, top: 62, bottom: 140 } : { x: 60, top: 80, bottom: 160 };
+    const right = r.width - m.x - (!narrow && opts.inset ? opts.inset() : 0);
+    if (x1 < m.x) dx = m.x - x1; else if (x2 > right) dx = right - x2;
+    if (y1 < m.top) dy = m.top - y1; else if (y2 > r.height - m.bottom) dy = r.height - m.bottom - y2;
     if (!dx && !dy) return;
     view.x += dx; view.y += dy;
     smooth();
@@ -193,7 +197,8 @@ export function createMap(stage, opts) {
       }
       edgeEls.set(e.key, { g, path, label, e });
     }
-    if (!userFitted || o.refit) fit(false);
+    if (o.refit) userFitted = false; // a new map (other app, other version): show all of it again
+    if (!userFitted) fit(false);
     applyView();
   }
 

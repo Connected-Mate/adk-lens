@@ -314,8 +314,10 @@ b { font-weight: 600; }
   height: 28px; padding: 0 12px 0 10px; border-radius: var(--pill); color: var(--ink); font-size: 13.5px; max-width: calc(100% - 28px);
   transition: background-color 160ms var(--ease);
 }
-.frame-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.frame-kind { color: var(--ink-2); white-space: nowrap; }
+/* The name always wins: when the frame is narrow, its kind gives way first. */
+.frame-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: min(100%, 9ch); }
+.frame-kind { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1000 auto; min-width: 0; }
+.frame-head > .ico, .frame-head > .diff-tag { flex: none; }
 .frame.k-sequential .frame-head .ico { color: var(--blue); }
 .frame.k-parallel .frame-head .ico { color: var(--yellow); }
 .frame.k-loop .frame-head .ico { color: var(--red); }
@@ -411,7 +413,7 @@ b { font-weight: 600; }
 .note-grip { height: 22px; display: flex; align-items: center; }
 .note-tag { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .note-text {
-  display: block; width: 100%; min-height: 44px; resize: none; border: 0; background: transparent; outline: none; overflow: hidden;
+  display: block; width: 100%; min-height: 44px; max-height: 280px; resize: none; border: 0; background: transparent; outline: none; overflow: hidden auto;
   font-family: var(--hand); font-size: 15.5px; line-height: 1.35; color: inherit; padding: 0; cursor: text; user-select: text; -webkit-user-select: text;
 }
 .note-text::placeholder { color: currentColor; opacity: 0.45; }
@@ -427,6 +429,23 @@ b { font-weight: 600; }
 @keyframes wobble { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg) translateY(-2px); } }
 .stamp-text { font-family: var(--hand); font-size: 14px; background: var(--paper, var(--paper-comment)); color: var(--paper-ink); padding: 2px 10px; border-radius: var(--pill); max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stamp.is-selected .stamp-face { outline: 2px solid var(--blue); outline-offset: 3px; }
+/* A mark dropped on a node: smaller, on its corner, its word beside it (never over the node's name). */
+.stamp.on-node { flex-direction: row; align-items: center; gap: 6px; }
+.stamp.on-node .stamp-face { width: 38px; height: 38px; font-size: 19px; flex: none; }
+.stamp.on-node .stamp-face.stamp-question { font-size: 22px; }
+.step-mark {
+  position: absolute; pointer-events: auto; z-index: 2; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px 0 7px;
+  border-radius: var(--pill); background: var(--paper-comment); color: var(--paper-ink); font-size: 12.5px; font-weight: 600;
+  box-shadow: 0 4px 10px -4px rgba(0, 0, 0, 0.3); font-variant-numeric: tabular-nums;
+  transition: transform 140ms var(--ease); animation: note-in 320ms var(--ease) backwards;
+}
+.step-mark:active { transform: scale(0.94); }
+@media (hover: hover) and (pointer: fine) { .step-mark:hover { transform: translateY(-1px); } }
+.note-limit { display: block; font-family: var(--sans); font-size: 11.5px; font-variant-numeric: tabular-nums; opacity: 0.7; text-align: right; margin-top: 2px; white-space: nowrap; }
+.note-limit.is-full { opacity: 1; font-weight: 600; color: #a3271d; }
+.note-bar .note-limit { color: var(--ink-2); margin: 0 2px; }
+.note-bar .note-limit.is-full { color: var(--red); }
+.sticky:focus-within { outline: 2px solid var(--blue); outline-offset: 3px; }
 
 .zone-line { fill: color-mix(in oklab, var(--accent, var(--yellow)) 9%, transparent); stroke: var(--accent, var(--yellow)); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 9; animation: march 2.4s linear infinite; }
 @keyframes march { to { stroke-dashoffset: -20; } }
@@ -477,12 +496,28 @@ b { font-weight: 600; }
 }
 .tool-btn:active { transform: scale(0.94); }
 .tool-btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
-.palette-sep { height: 1px; margin: 4px 8px; background: var(--line); }
 @media (hover: hover) and (pointer: fine) { .tool-btn:hover:not([aria-pressed="true"]) { background: var(--container-2); color: var(--ink); } }
 .tool-hint {
   position: absolute; left: 50%; top: 16px; transform: translateX(-50%); z-index: 4; padding: 8px 16px; border-radius: var(--pill);
   background: var(--ink); color: var(--bg); font-size: 14px; box-shadow: var(--shadow-2); animation: pop-in 200ms var(--ease) backwards; white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis;
 }
+/* A request started in an app that is not on screen. */
+.elsewhere {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 5; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 6px 0 16px; border-radius: var(--pill);
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow-3); font-size: 14.5px;
+  animation: drop-in 360ms var(--ease) backwards;
+}
+@keyframes drop-in { from { opacity: 0; transform: translate(-50%, -10px); } }
+.elsewhere-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.elsewhere-show {
+  flex: none; height: 32px; padding: 0 14px; border-radius: var(--pill); background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 500;
+  transition: transform 140ms var(--ease), background-color 160ms var(--ease);
+}
+.elsewhere-show:active { transform: scale(0.96); }
+.elsewhere-close { width: 32px; height: 32px; }
+.tool-hint:not([hidden]) ~ .elsewhere { top: 62px; }
+.pop.pop-marks { min-width: 0; display: flex; gap: 2px; padding: 6px; border-radius: var(--pill); }
 .zoom {
   position: absolute; right: 16px; bottom: 16px; z-index: 3; display: flex; padding: 3px; border-radius: var(--pill);
   background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-2);
@@ -656,6 +691,7 @@ b { font-weight: 600; }
 .pop-item:hover { background: var(--container); }
 .pop-item.is-current { background: var(--container-2); }
 .pop-main { font-size: 15px; display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.pop-main.is-orphan { color: var(--ink-2); font-style: italic; }
 .pop-sub { font-size: 13px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
 .pop-action { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 6px; padding: 12px; border-top: 1px solid var(--line-2); color: var(--blue); font-weight: 500; border-radius: 0 0 12px 12px; }
 .pop-action:hover { background: var(--container); }
@@ -663,11 +699,24 @@ b { font-weight: 600; }
 .badge.is-live { background: var(--tint-red); }
 .badge.is-error { background: var(--tint-red); color: var(--red); }
 .toast {
-  position: fixed; left: 50%; top: 100px; transform: translate(-50%, -12px); z-index: 60; padding: 10px 18px; border-radius: var(--pill);
+  position: fixed; left: 50%; top: 132px; transform: translate(-50%, -12px); z-index: 60; padding: 10px 18px; border-radius: var(--pill);
   background: var(--ink); color: var(--bg); font-size: 14.5px; box-shadow: var(--shadow-3); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 12px; white-space: nowrap; max-width: calc(100vw - 24px);
   transition: opacity 200ms var(--ease), transform 300ms var(--ease);
 }
 .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+.toast.has-action { pointer-events: auto; padding-right: 6px; }
+.toast-btn {
+  height: 30px; padding: 0 14px; border-radius: var(--pill); font-size: 14px; font-weight: 600;
+  background: color-mix(in oklab, var(--bg) 18%, transparent); color: var(--bg);
+  transition: background-color 160ms var(--ease), transform 140ms var(--ease);
+}
+.toast-btn:active { transform: scale(0.96); }
+.toast-btn:focus-visible { outline-color: var(--bg); }
+@media (hover: hover) and (pointer: fine) {
+  .toast-btn:hover { background: color-mix(in oklab, var(--bg) 30%, transparent); }
+  .elsewhere-show:hover { background: color-mix(in oklab, var(--ink) 86%, var(--bg)); }
+}
 
 /* ---------- first use ---------- */
 .empty { position: absolute; inset: 0; overflow-y: auto; z-index: 2; padding: clamp(32px, 9vh, 96px) 24px 60px; display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -704,6 +753,12 @@ body.is-empty .dock, body.is-empty .palette, body.is-empty .zoom { display: none
   body.has-panel .dock { left: calc(50% - 192px); width: min(680px, calc(100% - 420px - 96px)); }
 }
 
+/* ---------- in between (small laptop, tablet, phone on its side) ---------- */
+@media (min-width: 761px) and (max-width: 1000px) {
+  .brand-name, .runs-btn .chip-label { display: none; }
+  .zoom { bottom: auto; top: 50%; transform: translateY(-50%); flex-direction: column; }
+}
+
 /* ---------- small screens ---------- */
 @media (max-width: 760px) {
   .top { flex-wrap: wrap; padding: 6px 10px 8px; gap: 8px; }
@@ -719,9 +774,13 @@ body.is-empty .dock, body.is-empty .palette, body.is-empty .zoom { display: none
   .seg { order: 3; width: 100%; }
   .seg-btn { flex: 1 1 0; justify-content: center; }
   .palette { left: 8px; right: 8px; top: 8px; transform: none; flex-direction: row; overflow-x: auto; width: fit-content; max-width: calc(100% - 16px); }
-  .palette-sep { width: 1px; height: auto; margin: 8px 4px; flex: none; }
   .tool-btn { flex: none; }
   .tool-hint { top: 68px; }
+  .elsewhere { top: 68px; left: 8px; right: 58px; transform: none; max-width: none; padding-left: 14px; gap: 8px; animation-name: fade-in; }
+  .elsewhere { height: auto; min-height: 44px; padding-top: 6px; padding-bottom: 6px; border-radius: 22px; }
+  .elsewhere-text { flex: 1 1 auto; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+  .tool-hint:not([hidden]) ~ .elsewhere { top: 116px; }
+  .story:not([hidden]) ~ .elsewhere { top: 10px; right: 8px; }
   .zoom { right: 8px; bottom: auto; top: 68px; flex-direction: column; }
   .dock { bottom: 8px; width: calc(100% - 16px); gap: 8px; }
   .cap-line { font-size: 17px; }

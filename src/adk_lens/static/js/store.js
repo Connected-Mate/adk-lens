@@ -120,7 +120,7 @@ export function ingest(ev, bulk = false) {
   }
   let run = store.runs.get(runId);
   if (!run) {
-    run = { id: runId, app, session: str(ev.session), events: [], status: 'live', startTs: Number(ev.ts) || 0, userMessage: '', error: '', steps: null, stepsAt: -1 };
+    run = { id: runId, app, session: str(ev.session), events: [], status: 'live', startTs: Number(ev.ts) || 0, userMessage: '', error: '', started: false, steps: null, stepsAt: -1 };
     store.runs.set(runId, run);
   }
   run.events.push(ev);
@@ -129,18 +129,21 @@ export function ingest(ev, bulk = false) {
     run.userMessage = str(ev.user_message) || textOfParts(ev.parts);
     run.startTs = Number(ev.ts) || run.startTs;
     run.status = 'live';
+    run.started = true;
     // A session handles one request at a time: an older one still "live" was cut short.
     for (const other of store.runs.values()) {
       if (other !== run && other.app === app && other.session === run.session && other.status === 'live') other.status = 'stalled';
     }
   } else if (type === 'run_end') {
-    if (run.status !== 'error') run.status = 'done';
+    // `interrupted`: the hub closed the request itself (the agent's process went away, or it was cancelled).
+    if (ev.interrupted) run.status = 'interrupted';
+    else if (run.status !== 'error') run.status = 'done';
     run.duration = Number(ev.duration_ms) || undefined;
   } else if (type === 'run_error') {
     run.status = 'error';
     run.error = str(ev.error) || str(ev.error_type);
   }
-  return { run: runId };
+  return { run: runId, app, started: type === 'run_start' };
 }
 
 export function textOfParts(parts) {
@@ -235,6 +238,17 @@ function buildSteps(run) {
     const n = steps.filter((x) => x.seq === ev.seq).length;
     steps.push({ id: `${ev.seq ?? steps.length}:${n}`, seq: ev.seq, ts: Number(ev.ts) || 0, kind, ev, ...extra });
   };
+  // A failure usually arrives three times in a row (the tool, then its agent, then the request).
+  // Keep one step, at the place where it first broke; the rest stays available as details.
+  const fail = (ev, extra) => {
+    const prev = steps[steps.length - 1];
+    if (prev && prev.kind === 'error') {
+      prev.chain.push({ ev, ...extra });
+      if (extra.what === 'run') prev.fatal = true;
+      return;
+    }
+    add(ev, 'error', { ...extra, fatal: extra.what === 'run', chain: [{ ev, ...extra }] });
+  };
 
   for (const ev of run.events) {
     const type = str(ev.type);
@@ -288,7 +302,7 @@ function buildSteps(run) {
         break;
       }
       case 'model_error':
-        add(ev, 'error', { node: agentNodeId(app, agentName || top), agent: agentName || top, what: 'model', text: str(ev.error) || str(ev.error_type) });
+        fail(ev, { node: agentNodeId(app, agentName || top), agent: agentName || top, what: 'model', text: str(ev.error) || str(ev.error_type) });
         break;
       case 'tool_start': {
         if (str(ev.tool) === TRANSFER) break;
@@ -309,7 +323,7 @@ function buildSteps(run) {
         if (str(ev.tool) === TRANSFER && !ev.error) break;
         const real = steps.slice().reverse().find((x) => x.kind === 'tool' && x.ev.call_id === ev.call_id && ev.call_id);
         const tid = real ? real.node : toolNodeId(app, agentName || top, ev.tool, false);
-        add(ev, 'error', { node: tid, agent: agentName || top, tool: str(ev.tool), what: 'tool', text: str(ev.error) || str(ev.error_type) });
+        fail(ev, { node: tid, agent: agentName || top, tool: str(ev.tool), what: 'tool', text: str(ev.error) || str(ev.error_type) });
         break;
       }
       case 'event': {
@@ -337,21 +351,24 @@ function buildSteps(run) {
         }
         if (ev.escalate) add(ev, 'escalate', { node: a, agent: author || top });
         const text = str(ev.text) || textOfParts(ev.parts);
-        if (ev.final && (text || !arr(ev.parts).length) && !ev.transfer_to) {
+        // An answer needs words. Without content recording (no text, no parts at all) it is still shown;
+        // an empty final event, as ADK sends when a request breaks, is not an answer.
+        const unrecorded = ev.text === undefined && ev.parts === undefined;
+        if (ev.final && (text || unrecorded) && !ev.error && !ev.transfer_to) {
           add(ev, 'answer', { node: USER, from: a, to: USER, agent: author || top, text });
         }
         break;
       }
       case 'agent_error':
-        add(ev, 'error', { node: agentNodeId(app, agentName || top), agent: agentName || top, what: 'agent', text: str(ev.error) || str(ev.error_type) });
+        fail(ev, { node: agentNodeId(app, agentName || top), agent: agentName || top, what: 'agent', text: str(ev.error) || str(ev.error_type) });
         break;
       case 'run_end':
-        add(ev, 'done', { node: USER });
+        add(ev, 'done', { node: USER, interrupted: !!ev.interrupted });
         break;
       case 'run_error': {
         const prev = steps[steps.length - 1];
         const where = prev && prev.kind === 'error' ? prev.node : (steps.slice().reverse().find((x) => x.node && x.node !== USER) || {}).node || USER;
-        add(ev, 'error', { node: where, what: 'run', text: str(ev.error) || str(ev.error_type) });
+        fail(ev, { node: where, what: 'run', text: str(ev.error) || str(ev.error_type) });
         break;
       }
       default:

@@ -1,7 +1,7 @@
 // ADK Lens: wiring of the whole page.
 import { h, clear, clipped, short, fmtDuration, lsGet, lsSet, reducedMotion, put } from './dom.js';
 import { icon } from './icons.js';
-import { initLang, setLang, getLang, t, tn } from './i18n.js';
+import { initLang, setLang, getLang, t, tn, tp } from './i18n.js';
 import {
   store, loadState, applyShapes, ingest, isEmpty, resetStore, runsOf, stepsOf, frameAt, nodeActivity,
   withExtras, diffTopologies, unionTopology, USER,
@@ -15,11 +15,14 @@ const params = new URLSearchParams(location.search);
 const HEAD = { 'X-ADK-Lens': '1', 'Content-Type': 'application/json' };
 const SPEEDS = [0.5, 1, 2, 4];
 const TOOLS = new Set(['tool', 'toolset']);
+const MORE_MARKS = ['idea', 'bug', 'like'];
+const stampFace = (sId) => h('span', { class: `stamp-face stamp-${sId} mini`, 'aria-hidden': 'true', text: STAMPS[sId] });
 
 const ui = {
   app: null, runId: null, idx: 0, playing: false, speed: 1, follow: true,
   view: lsGet('adk-lens.view') === 'linear' ? 'linear' : 'journey',
   version: null, compare: null, panel: null, conn: 'connecting', fixture: false, theme: lsGet('adk-lens.theme') || 'auto',
+  elsewhere: null, // {app, runId}: a request that started in an app the board is not showing
 };
 const el = {};
 let map, story, notes;
@@ -96,13 +99,14 @@ function buildShell() {
     b.setAttribute('aria-pressed', 'false');
     return b;
   };
-  put(el.palette, 
+  // Four tools are enough for most notes; the other marks wait behind "more".
+  el.moreMarks = btn('tool-btn', t('tools.more'), [icon('more', 20)], (e) => openMarks(e.currentTarget), { attrs: { 'aria-pressed': 'false', 'aria-haspopup': 'true', 'aria-expanded': 'false' } });
+  put(el.palette,
     tool('select', t('tools.select'), icon('cursor', 20)),
     tool('sticky', t('tools.sticky'), icon('note', 20)),
+    tool('stamp:question', t('tools.stamp.question'), stampFace('question')),
     tool('ellipse', t('tools.ellipse'), icon('ellipse', 20)),
-    tool('lasso', t('tools.lasso'), icon('lasso', 20)),
-    h('span', { class: 'palette-sep', 'aria-hidden': 'true' }),
-    ...Object.keys(STAMPS).map((sId) => tool(`stamp:${sId}`, t(`tools.stamp.${sId}`), h('span', { class: `stamp-face stamp-${sId} mini`, text: STAMPS[sId] }))));
+    el.moreMarks);
 
   el.zoom = h('div', { class: 'zoom', role: 'group', 'aria-label': t('zoom.fit') },
     btn('icon-btn', t('zoom.out'), [icon('minus', 18)], () => map.zoomBy(1 / 1.25)),
@@ -132,9 +136,10 @@ function buildShell() {
 
   el.panel = h('aside', { class: 'panel', hidden: true, tabindex: '-1' });
   el.toast = h('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
+  el.elsewhere = h('div', { class: 'elsewhere', role: 'status', 'aria-live': 'polite', hidden: true });
   el.wave = h('div', { class: 'wave', 'aria-hidden': 'true' });
 
-  el.main = h('main', { class: 'main' }, el.stage, el.story, el.empty, el.palette, el.zoom, el.hint, el.dock, el.panel);
+  el.main = h('main', { class: 'main' }, el.stage, el.story, el.empty, el.palette, el.zoom, el.hint, el.elsewhere, el.dock, el.panel);
   put(root, h('a', { class: 'skip', href: '#board', text: t('app.skip') }), el.wave, el.top, el.banner, el.main, el.toast);
 
   map = createMap(el.stage, {
@@ -147,12 +152,17 @@ function buildShell() {
     getApp: () => ui.app,
     onChange: () => { renderTop(); refreshNotesViews(); },
     onTool: (tool) => {
-      for (const b of el.palette.querySelectorAll('.tool-btn')) b.setAttribute('aria-pressed', String(b.dataset.tool === tool));
+      for (const b of el.palette.querySelectorAll('.tool-btn[data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === tool));
+      el.moreMarks.setAttribute('aria-pressed', String(MORE_MARKS.some((sId) => tool === `stamp:${sId}`)));
       const key = tool === 'select' ? '' : tool.startsWith('stamp:') ? 'tools.hint.stamp' : `tools.hint.${tool}`;
       el.hint.hidden = !key;
       el.hint.textContent = key ? t(key) : '';
     },
     buildPrompt: () => promptText(),
+    nodeName: (id) => (id === USER ? t('node.user') : (shownTopology().nodes.find((n) => n.id === id) || {}).name || id),
+    stepNode: (item) => stepOfComment(item).node,
+    onStepMark: (item) => showStepComment(item),
+    onDelete: (n) => toast(tp('note.deleted', n), { label: t('note.undo'), run: () => notes.undoDelete() }),
     push: (doc) => {
       if (ui.fixture) return;
       fetch('/api/notes', { method: 'PUT', headers: HEAD, body: JSON.stringify(doc) })
@@ -171,7 +181,7 @@ function buildShell() {
       const run = currentRun();
       if (!run) return;
       const sn = sentence(st);
-      const item = notes.addStepComment(run, st, { runTitle: short(run.userMessage, 120), sentence: sentenceText(st), content: short(sn.body || '', 500) });
+      const item = notes.addStepComment(run, st, { node: st.node, runTitle: short(run.userMessage, 120), sentence: sentenceText(st), content: short(sn.body || '', 500) });
       const field = el.story.querySelector(`[data-note="${CSS.escape(item.id)}"] textarea`);
       if (field) field.focus();
     },
@@ -203,11 +213,44 @@ function shownTopology() {
   return withExtras(ui.app, base);
 }
 
-function toast(text) {
-  el.toast.textContent = text;
+// A short message; `action` adds one button to it (e.g. Undo) and keeps it a little longer.
+function toast(text, action) {
+  clear(el.toast);
+  put(el.toast, h('span', { text }));
+  if (action) put(el.toast, btn('toast-btn', action.label, [action.label], () => { hideToast(); action.run(); }, { noTitle: true }));
   el.toast.classList.add('is-on');
+  el.toast.classList.toggle('has-action', !!action);
   clearTimeout(toastT);
-  toastT = setTimeout(() => el.toast.classList.remove('is-on'), 2600);
+  toastT = setTimeout(hideToast, action ? 7000 : 2600);
+}
+
+function hideToast() {
+  clearTimeout(toastT);
+  el.toast.classList.remove('is-on', 'has-action');
+  if (el.toast.contains(document.activeElement)) el.stage.focus({ preventScroll: true });
+  const b = el.toast.querySelector('button');
+  if (b) b.remove(); // nothing invisible left to tab into
+}
+
+// Where a Story comment points: its step (when the request is still known) and the node of that step.
+function stepOfComment(item) {
+  const tg = item.target || {};
+  const run = store.runs.get(tg.run);
+  const idx = run ? stepsOf(run).findIndex((st) => st.id === tg.step) : -1;
+  return { run, idx, node: idx >= 0 ? stepsOf(run)[idx].node : tg.node || null };
+}
+
+// From the marker on the map to the comment itself, in the Story.
+function showStepComment(item) {
+  const { run, idx } = stepOfComment(item);
+  if (!run || idx < 0) { openPromptPanel(); return; }
+  pause();
+  ui.follow = false;
+  if (ui.runId !== run.id) selectRun(run.id);
+  ui.idx = idx;
+  setView('linear');
+  const field = el.story.querySelector(`[data-note="${CSS.escape(item.id)}"] textarea`);
+  if (field) field.focus();
 }
 
 function ago(ts) {
@@ -241,10 +284,52 @@ function renderAll(o = {}) {
   renderEmpty(emptyState);
   renderTop();
   renderBanner();
+  renderElsewhere();
   drawMap(o.refit);
   renderRun({ instant: true });
   notes.render();
   renderPanel();
+}
+
+// "New request in <app> · Show": a request started somewhere the board is not looking.
+function renderElsewhere() {
+  const e = ui.elsewhere && ui.elsewhere.app !== ui.app && store.apps[ui.elsewhere.app] ? ui.elsewhere : (ui.elsewhere = null);
+  const was = el.elsewhere.dataset.app || '';
+  if (was === (e ? e.app : '')) return; // already saying it: do not announce it twice
+  const hadFocus = el.elsewhere.contains(document.activeElement);
+  clear(el.elsewhere);
+  el.elsewhere.hidden = !e;
+  el.elsewhere.dataset.app = e ? e.app : '';
+  if (hadFocus) el.appBtn.focus({ preventScroll: true });
+  if (!e) return;
+  put(el.elsewhere,
+    h('span', { class: 'live-dot' }),
+    h('span', { class: 'elsewhere-text' }, tn('elsewhere.new', { app: short(e.app, 40) })),
+    btn('elsewhere-show', `${t('elsewhere.show')}: ${e.app}`, [t('elsewhere.show')], () => { if (ui.elsewhere) showApp(ui.elsewhere.app, ui.elsewhere.runId); }, { noTitle: true }),
+    btn('icon-btn elsewhere-close', t('elsewhere.dismiss'), [icon('close', 16)], () => { ui.elsewhere = null; renderElsewhere(); }));
+}
+
+function showApp(app, runId) {
+  selectApp(app);
+  const runs = runsOf(app);
+  const target = runs.find((r) => r.id === runId) || runs.find((r) => r.status === 'live') || runs[0];
+  if (!target) return;
+  ui.follow = true;
+  selectRun(target.id, { at: 'start', play: true });
+}
+
+// Called for every request that starts.
+function noticeRunStart(res) {
+  if (!ui.app || res.app === ui.app || !store.apps[res.app]) return;
+  if (!runsOf(ui.app).length) {
+    // Nothing to look at here yet: go where the action is.
+    showApp(res.app, res.run);
+    toast(t('elsewhere.switched', { app: short(res.app, 40) }));
+    return;
+  }
+  ui.elsewhere = { app: res.app, runId: res.run };
+  renderElsewhere();
+  renderTop();
 }
 
 function renderEmpty(show) {
@@ -276,9 +361,10 @@ function renderTop() {
   clear(el.appBtn);
   el.appBtn.hidden = !ui.app;
   if (ui.app) {
-    put(el.appBtn, h('span', { class: 'chip-label', text: short(ui.app, 28) }), apps.length > 1 ? icon('chevron', 16) : null);
+    const busy = [...store.runs.values()].some((r) => r.app !== ui.app && r.status === 'live' && store.apps[r.app]);
+    put(el.appBtn, busy ? h('span', { class: 'live-dot' }) : null, h('span', { class: 'chip-label', text: short(ui.app, 28) }), apps.length > 1 ? icon('chevron', 16) : null);
     el.appBtn.disabled = apps.length < 2;
-    el.appBtn.setAttribute('aria-label', `${t('top.app')}: ${ui.app}${apps.length > 1 ? `. ${t('top.apps')}` : ''}`);
+    el.appBtn.setAttribute('aria-label', `${t('top.app')}: ${ui.app}${apps.length > 1 ? `. ${t('top.apps')}` : ''}${busy ? `. ${t('top.apps.live')}` : ''}`);
   }
   const vers = versionsOf(ui.app);
   const ver = shownVersion();
@@ -334,7 +420,10 @@ function drawMap(refit) {
   const extraN = (store.extra[ui.app] || { nodes: [] }).nodes.length;
   const key = [ui.app, ver ? ver.v : 0, ui.compare, extraN, getLang(), store.apps[ui.app].nodes.length, ver ? ver.hash : ''].join('|');
   if (key === mapKey && !refit) return;
-  const appChanged = mapKey.split('|')[0] !== ui.app;
+  const [wasApp, wasVer, wasCompare] = mapKey.split('|');
+  const appChanged = wasApp !== ui.app;
+  // Another app, another version or a comparison draws another map: show all of it.
+  const shapeChanged = appChanged || wasVer !== String(ver ? ver.v : 0) || wasCompare !== String(ui.compare);
   mapKey = key;
   let topo = shownTopology();
   let diff = null;
@@ -345,8 +434,7 @@ function drawMap(refit) {
       topo = unionTopology(base.topology, ver.topology);
     }
   }
-  map.setTopology(topo, { diff, refit: refit || appChanged });
-  if (appChanged) map.fit();
+  map.setTopology(topo, { diff, refit: refit || shapeChanged });
   notes.render();
 }
 
@@ -538,7 +626,7 @@ function closePop(refocus = true) {
   if (refocus) anchor.focus({ preventScroll: true });
 }
 
-function openPop(anchor, build, cls = '') {
+function openPop(anchor, build, cls = '', side = 'below') {
   if (pop && pop.anchor === anchor) { closePop(); return null; }
   closePop(false);
   const node = h('div', { class: `pop ${cls}`, role: 'dialog' });
@@ -546,11 +634,18 @@ function openPop(anchor, build, cls = '') {
   put(document.body, node);
   const r = anchor.getBoundingClientRect();
   const w = node.offsetWidth;
-  const left = Math.max(12, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 12));
-  node.style.left = `${left}px`;
-  node.style.top = `${r.bottom + 10}px`;
-  node.style.setProperty('--ox', `${r.left + r.width / 2 - left}px`);
-  node.style.maxHeight = `${window.innerHeight - r.bottom - 26}px`;
+  if (side === 'right' && window.innerWidth > 760) {
+    // Next to the vertical tool rail.
+    node.style.left = `${r.right + 14}px`;
+    node.style.top = `${Math.max(12, r.top + r.height / 2 - node.offsetHeight / 2)}px`;
+    node.style.setProperty('--ox', '0px');
+  } else {
+    const left = Math.max(12, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 12));
+    node.style.left = `${left}px`;
+    node.style.top = `${r.bottom + 10}px`;
+    node.style.setProperty('--ox', `${r.left + r.width / 2 - left}px`);
+    node.style.maxHeight = `${window.innerHeight - r.bottom - 26}px`;
+  }
   anchor.setAttribute('aria-expanded', 'true');
   pop = { node, anchor };
   const first = node.querySelector('button, select, input');
@@ -564,12 +659,33 @@ function popItem(kids, onClick, o = {}) {
   return b;
 }
 
+// The marks used less often: idea, bug, thumbs up.
+function openMarks(anchor) {
+  openPop(anchor, (node) => {
+    node.setAttribute('aria-label', t('tools.more'));
+    for (const sId of MORE_MARKS) {
+      const id = `stamp:${sId}`;
+      const b = btn('tool-btn', t(`tools.stamp.${sId}`), [stampFace(sId)], (e) => {
+        closePop(false);
+        if (e.detail === 0) notes.placeAtCenter(id); // keyboard: drop it in the middle
+        else notes.setTool(id);
+      });
+      b.setAttribute('aria-pressed', String(notes.tool() === id));
+      put(node, b);
+    }
+  }, 'pop-marks', 'right');
+}
+
 function openApps(anchor) {
   openPop(anchor, (node) => {
     put(node, h('h2', { class: 'pop-title', text: t('top.apps') }));
     for (const app of Object.keys(store.apps)) {
-      const n = runsOf(app).length;
-      put(node, popItem([h('span', { class: 'pop-main', text: app }), h('span', { class: 'pop-sub', text: n ? `${n} · ${t('top.runs').toLowerCase()}` : t('top.runs.none') })], () => selectApp(app), { current: app === ui.app }));
+      const runs = runsOf(app);
+      const live = runs.some((r) => r.status === 'live');
+      put(node, popItem([
+        h('span', { class: 'pop-main', text: app }),
+        h('span', { class: 'pop-sub' }, live ? h('span', { class: 'badge is-live' }, h('span', { class: 'live-dot' }), t('runs.live')) : null, h('span', { text: tp('apps.runs', runs.length) })),
+      ], () => selectApp(app), { current: app === ui.app }));
     }
   });
 }
@@ -578,6 +694,7 @@ function selectApp(app) {
   if (app === ui.app) return;
   pause();
   ui.app = app; ui.runId = null; ui.idx = 0; ui.version = null; ui.compare = null; ui.panel = null;
+  if (ui.elsewhere && ui.elsewhere.app === app) ui.elsewhere = null;
   const latest = runsOf(app)[0];
   if (latest) ui.runId = latest.id, ui.idx = Math.max(0, stepsOf(latest).length - 1);
   renderAll({ refit: true });
@@ -591,10 +708,12 @@ function openRuns(anchor) {
     for (const r of runs) {
       const badge = r.status === 'live' ? h('span', { class: 'badge is-live' }, h('span', { class: 'live-dot' }), t('runs.live'))
         : r.status === 'error' ? h('span', { class: 'badge is-error', text: t('runs.failed') })
-          : r.status === 'stalled' ? h('span', { class: 'badge', text: t('runs.stalled') }) : null;
+          : r.status === 'interrupted' ? h('span', { class: 'badge', text: t('runs.interrupted') })
+            : r.status === 'stalled' ? h('span', { class: 'badge', text: t('runs.stalled') }) : null;
       put(node, popItem([
-        h('span', { class: 'pop-main', text: short(r.userMessage, 90) || t('runs.untitled') }),
-        h('span', { class: 'pop-sub' }, badge, h('span', { text: [ago(r.startTs), t('runs.steps', { n: stepsOf(r).length })].filter(Boolean).join(' · ') })),
+        // No run_start: the board began listening while this request was already running.
+        h('span', { class: `pop-main${r.started ? '' : ' is-orphan'}`, text: short(r.userMessage, 90) || t(r.started ? 'runs.untitled' : 'runs.orphan') }),
+        h('span', { class: 'pop-sub' }, badge, h('span', { text: [ago(r.startTs), tp('runs.steps', stepsOf(r).length)].filter(Boolean).join(' · ') })),
       ], () => {
         ui.follow = r.status === 'live';
         selectRun(r.id, { at: 'start', play: true });
@@ -614,7 +733,12 @@ function openVersions(anchor) {
       put(node, popItem([
         h('span', { class: 'pop-main' }, t('top.version', { v: v.v }), v === latest ? h('span', { class: 'badge', text: t('versions.current') }) : null),
         h('span', { class: 'pop-sub', text: when }),
-      ], () => { ui.version = v === latest ? null : v.v; ui.compare = null; if (ui.panel && ui.panel.type === 'diff') ui.panel = null; renderAll(); }, { current: v === cur }));
+      ], () => {
+        ui.version = v === latest ? null : v.v;
+        if (shownVersion() !== v) ui.version = v.v; // the request on screen is older than the current version: show what was asked for
+        ui.compare = null;         if (ui.panel && ui.panel.type === 'diff') ui.panel = null;
+        renderAll();
+      }, { current: v === cur }));
     }
     if (list.length > 1 && cur && cur.v > list[0].v) {
       const prev = [...list].reverse().find((v) => v.v < cur.v);
@@ -758,7 +882,7 @@ function nodeCard(id) {
   const facts = [];
   if (node.model) facts.push([t('card.model'), String(node.model)]);
   if (node.output_key) facts.push([t('card.output_key'), String(node.output_key)]);
-  if (node.max_iterations) facts.push([t('card.max_iterations'), t('card.max_iterations.v', { n: node.max_iterations })]);
+  if (node.max_iterations) facts.push([t('card.max_iterations'), tp('card.max_iterations.v', node.max_iterations)]);
   if (facts.length) put(body, h('dl', { class: 'facts' }, ...facts.map(([k, v]) => [h('dt', { text: k }), h('dd', { text: v })])));
   const chip = (n) => btn(`mini-chip k-${n.kind}`, n.name, [icon(TOOLS.has(n.kind) ? n.kind : 'llm', 14), h('span', { text: short(n.name, 30) })], () => openNode(n.id), { noTitle: true });
   const kids = topo.nodes.filter((n) => n.parent === id);
@@ -776,12 +900,12 @@ function nodeCard(id) {
     if (!act.steps.length) put(body, section(t('card.run'), h('p', { class: 'muted', text: t('card.run.none') })));
     else {
       const bits = [];
-      if (act.sum.thinks) bits.push(t('card.sum.thinks', { n: act.sum.thinks }));
-      if (act.sum.uses) bits.push(t('card.sum.uses', { n: act.sum.uses }));
+      if (act.sum.thinks) bits.push(tp('card.sum.thinks', act.sum.thinks));
+      if (act.sum.uses) bits.push(tp('card.sum.uses', act.sum.uses));
       if (act.sum.tokensIn || act.sum.tokensOut) bits.push(t('card.sum.tokens', { a: act.sum.tokensIn, b: act.sum.tokensOut }));
       const total = act.sum.total || act.sum.ms;
       if (total) bits.push(t('card.sum.time', { d: fmtDuration(total) }));
-      if (act.sum.errors) bits.push(t('card.sum.errors', { n: act.sum.errors }));
+      if (act.sum.errors) bits.push(tp('card.sum.errors', act.sum.errors));
       const list = h('ol', { class: 'mini-steps' });
       for (const { i, step: st } of act.steps.slice(0, 40)) {
         const sn = sentence(st);
@@ -815,13 +939,17 @@ function refreshNodeComments(focusLast) {
   if (focusLast) { const ta = el.nodeComments.querySelector('.note-inline:last-child textarea'); if (ta) ta.focus(); }
 }
 
-async function copyPrompt() {
-  const had = ui.app && notes.forApp(ui.app).length > 0;
+function openPromptPanel() {
   ui.panel = { type: 'prompt' };
   renderPanel();
   if (ui.view === 'journey') map.fit(); // make room so the notes stay visible next to the panel
+  el.panel.focus({ preventScroll: true });
+}
+
+async function copyPrompt() {
+  const had = ui.app && notes.forApp(ui.app).length > 0;
+  openPromptPanel();
   if (had) await doCopy();
-  else el.panel.focus({ preventScroll: true });
 }
 
 async function doCopy() {
@@ -854,7 +982,7 @@ function promptPanel() {
   const area = h('textarea', { class: 'prompt-text', readonly: true, spellcheck: 'false', 'aria-label': t('prompt.aria') });
   area.value = promptText();
   const copy = btn('primary-btn prompt-copy', t('prompt.copy'), [icon('copy', 17), h('span', { text: t('prompt.copy') })], () => doCopy(), { noTitle: true });
-  put(body, h('div', { class: 'prompt-bar' }, h('span', { class: 'muted', text: t('prompt.count', { n }) }), copy),
+  put(body, h('div', { class: 'prompt-bar' }, h('span', { class: 'muted', text: tp('prompt.count', n) }), copy),
     h('p', { class: 'copy-status', role: 'status', 'aria-live': 'polite' }), area);
   put(el.panel, body);
 }
@@ -900,7 +1028,8 @@ function diffPanel() {
   put(body, ul);
   const added = [...diff.edges.values()].filter((x) => x === 'added').length;
   const removed = [...diff.edges.values()].filter((x) => x === 'removed').length;
-  if (added || removed) put(body, h('p', { class: 'muted', text: t('diff.links', { a: added, r: removed }) }));
+  const links = [added ? tp('diff.links.added', added) : '', removed ? tp('diff.links.removed', removed) : ''].filter(Boolean);
+  if (links.length) put(body, h('p', { class: 'muted', text: links.join(', ') }));
   put(body, btn('ghost-btn', t('versions.compare.off'), [t('versions.compare.off')], () => stopCompare(), { noTitle: true }));
   put(el.panel, body);
 }
@@ -959,14 +1088,17 @@ function handleEvent(ev) {
   }
   const res = ingest(ev);
   if (!res) return;
-  if (res.cleared) { ui.runId = null; renderAll(); return; }
+  if (res.cleared) { ui.runId = null; ui.elsewhere = null; renderAll(); return; }
   if (res.topology) {
     mapKey = '';
     renderAll();
     refetchShapes();
     return;
   }
-  if (res.run) scheduleRefresh(res.run);
+  if (res.run) {
+    if (res.started) noticeRunStart(res);
+    scheduleRefresh(res.run);
+  }
 }
 
 function setConn(state) {
@@ -1073,9 +1205,18 @@ async function boot() {
 // ---------------------------------------------------------------- keyboard
 
 document.addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.defaultPrevented || e.altKey) return;
   const tgt = e.target;
   const typing = tgt.closest && tgt.closest('textarea, input:not([type="range"]), select, [contenteditable="true"]');
+  if (e.metaKey || e.ctrlKey) {
+    // Cmd/Ctrl+Z brings back the note just deleted (inside a text field it keeps undoing the typing).
+    if (!e.shiftKey && e.key.toLowerCase() === 'z' && !typing && notes.canUndo()) {
+      e.preventDefault();
+      hideToast();
+      notes.undoDelete();
+    }
+    return;
+  }
   if (e.key === 'Escape') {
     if (pop) { closePop(); e.preventDefault(); return; }
     if (typing) { tgt.blur(); return; }

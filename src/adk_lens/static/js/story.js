@@ -55,8 +55,13 @@ export function sentence(step) {
     case 'output': return { key: 's.output', vars: { agent }, body: bodyOf(step.output) };
     case 'escalate': return { key: 's.escalate', vars: { agent } };
     case 'answer': return { key: 's.answer', vars: { agent }, body: step.text };
-    case 'done': return ev.duration_ms ? { key: 's.done.d', vars: { d: fmtDuration(ev.duration_ms) } } : { key: 's.done', vars: {} };
-    case 'error': return { key: `s.error.${step.what || 'run'}`, vars: { agent, tool: step.tool || '?' }, body: step.text };
+    case 'done': if (step.interrupted) return { key: 's.interrupted', vars: {} };
+      return ev.duration_ms ? { key: 's.done.d', vars: { d: fmtDuration(ev.duration_ms) } } : { key: 's.done', vars: {} };
+    case 'error': {
+      // One step for the whole failure: it says where it broke, and whether the request stopped there.
+      const what = step.what || 'run';
+      return { key: step.fatal && what !== 'run' ? `s.fail.${what}` : `s.error.${what}`, vars: { agent, tool: step.tool || '?' }, body: step.text };
+    }
     default: return { key: 's.done', vars: {} };
   }
 }
@@ -87,10 +92,17 @@ function detailsContent(step) {
   else if (step.kind === 'tool_result') out.push(block(t('story.result'), ev.result));
   else if (step.kind === 'memory') out.push(block(t('story.result'), step.delta));
   else if (step.kind === 'output') out.push(block(t('story.result'), step.output));
+  else if (step.kind === 'error') {
+    for (const c of step.chain || []) {
+      const type = c.ev && c.ev.error_type ? String(c.ev.error_type) : '';
+      out.push(block(t(`s.error.${c.what || 'run'}`, { agent: c.agent || '?', tool: c.tool || '?' }), [c.text, type && type !== c.text ? `(${type})` : ''].filter(Boolean).join(' ')));
+    }
+  }
+  const all = step.chain && step.chain.length > 1 ? step.chain.map((c) => c.ev) : ev;
   const shown = out.filter(Boolean);
   const raw = h('details', { class: 'raw' }, h('summary', { text: t('story.raw') }));
   raw.addEventListener('toggle', () => {
-    if (raw.open && raw.children.length === 1) put(raw, h('pre', { class: 'json', tabindex: '0', text: pretty(ev) }));
+    if (raw.open && raw.children.length === 1) put(raw, h('pre', { class: 'json', tabindex: '0', text: pretty(all) }));
   });
   return [...shown, raw];
 }
@@ -129,15 +141,18 @@ export function createStory(root, opts) {
     commentBtn.addEventListener('click', () => opts.onComment(step, i));
     const notes = h('div', { class: 'st-notes' });
     const li = h('li', { class: `st tone-${step.kind}`, dataset: { i: String(i), id: step.id } },
-      h('span', { class: 'st-ico', 'aria-hidden': 'true' }, icon(TONE_ICON[step.kind] || 'custom', 17)),
+      h('span', { class: 'st-ico', 'aria-hidden': 'true' }, icon(step.interrupted ? 'warn' : TONE_ICON[step.kind] || 'custom', 17)),
       h('div', { class: 'st-main' },
         h('div', { class: 'st-head' }, line, sn.meta ? h('span', { class: 'st-meta', text: sn.meta }) : null),
         body,
         h('div', { class: 'st-actions' }, det.querySelector('summary') ? det : null, commentBtn),
         notes));
     li.style.setProperty('--i', String(Math.min(i, 24)));
-    return { li, notes, step };
+    return { li, notes, step, sig: sigOf(step) };
   }
+
+  // A failure step grows when the next error of the same failure arrives.
+  const sigOf = (step) => `${step.id}|${step.chain ? step.chain.length : 0}`;
 
   function update(run, idx, o = {}) {
     const steps = run ? stepsOf(run) : [];
@@ -150,6 +165,13 @@ export function createStory(root, opts) {
       count = 0;
       runId = run ? run.id : null;
       langAt = document.documentElement.lang;
+    }
+    const lastRow = rows[count - 1];
+    if (lastRow && steps[count - 1] && lastRow.sig !== sigOf(steps[count - 1])) {
+      const fresh = row(steps[count - 1], count - 1);
+      lastRow.li.replaceWith(fresh.li);
+      rows[count - 1] = fresh;
+      opts.fillNotes(fresh.notes, runId, fresh.step);
     }
     for (let i = count; i < steps.length; i++) {
       const r = row(steps[i], i);

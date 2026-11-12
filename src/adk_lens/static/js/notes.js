@@ -1,12 +1,14 @@
 // Whiteboard annotations: sticky notes, stamps, circled areas, comments.
 import { h, s, clear, lsGet, lsSet, put } from './dom.js';
 import { icon } from './icons.js';
-import { t } from './i18n.js';
+import { t, tp } from './i18n.js';
 
 const LS_KEY = 'adk-lens.notes';
 export const KINDS = ['comment', 'question', 'idea', 'bug'];
 export const STAMPS = { question: '?', idea: '💡', bug: '🐞', like: '👍' };
 
+const MAX_TEXT = 2000;
+const MAX_WORD = 400;
 const uid = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 export function createNotes(map, stage, opts) {
@@ -16,6 +18,7 @@ export function createNotes(map, stage, opts) {
   let saveT = 0;
   let swallowClick = 0;
   let draft = null;
+  let trash = null; // what the last deletion removed: [{item, index}]
 
   // ----- persistence -----
   function load(hubDoc) {
@@ -67,7 +70,7 @@ export function createNotes(map, stage, opts) {
   }
 
   function textArea(item, placeholder) {
-    const ta = h('textarea', { class: 'note-text', rows: '2', placeholder, 'aria-label': placeholder, maxlength: '2000' });
+    const ta = h('textarea', { class: 'note-text', rows: '2', placeholder, 'aria-label': placeholder, maxlength: String(MAX_TEXT) });
     ta.value = item.text || '';
     ta.addEventListener('input', () => {
       item.text = ta.value;
@@ -79,7 +82,21 @@ export function createNotes(map, stage, opts) {
       if (e.key === 'Escape') ta.blur();
     });
     requestAnimationFrame(() => autoGrow(ta));
-    return ta;
+    return [ta, limitHint(ta, MAX_TEXT)];
+  }
+
+  // The browser stops typing at the limit without a word: say so when it gets close.
+  function limitHint(field, max) {
+    const el = h('span', { class: 'note-limit', role: 'status', hidden: true });
+    const sync = () => {
+      const n = field.value.length;
+      el.hidden = n < max * 0.9;
+      el.textContent = el.hidden ? '' : t('note.limit', { n, max });
+      el.classList.toggle('is-full', n >= max);
+    };
+    field.addEventListener('input', sync);
+    sync();
+    return el;
   }
 
   function deleteBtn(item) {
@@ -107,6 +124,11 @@ export function createNotes(map, stage, opts) {
   function pos(item) {
     if (item.target && item.target.type === 'node') {
       const b = map.box(item.target.id);
+      if (b && item.type === 'stamp') {
+        // On the top right corner, mostly outside the node, so its name stays readable. Several marks sit side by side.
+        const row = items.filter((o) => o.type === 'stamp' && o.app === item.app && o.target && o.target.type === 'node' && o.target.id === item.target.id);
+        return { x: b.x + b.w - 12 - Math.max(0, row.indexOf(item)) * 30 + (item.dx || 0), y: b.y - 30 + (item.dy || 0) };
+      }
       if (b) return { x: b.x + b.w - 24 + (item.dx || 0), y: b.y - 132 + (item.dy || 0) };
     }
     return { x: item.x || 0, y: item.y || 0 };
@@ -145,14 +167,37 @@ export function createNotes(map, stage, opts) {
       if (item.type === 'zone') drawZone(item);
       else drawNote(item);
     }
+    drawStepMarks(app);
     if (draft) put(map.notesSvg, draft.el);
+  }
+
+  // Comments written in the Story view: a small marker on the node they talk about.
+  function drawStepMarks(app) {
+    const byNode = new Map();
+    for (const item of items) {
+      if (item.app !== app || item.type !== 'comment' || !item.target || item.target.type !== 'step') continue;
+      const id = opts.stepNode(item);
+      if (!id || !map.box(id)) continue;
+      if (!byNode.has(id)) byNode.set(id, []);
+      byNode.get(id).push(item);
+    }
+    for (const [id, list] of byNode) {
+      const b = map.box(id);
+      const label = tp('note.steps', list.length);
+      const el = h('button', { class: 'step-mark', type: 'button', 'aria-label': label, title: label }, icon('comment', 14), h('span', { text: String(list.length) }));
+      el.style.left = `${b.x + b.w - 20}px`;
+      el.style.top = `${b.y + b.h - 13}px`;
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('click', () => opts.onStepMark(list[0]));
+      put(map.notesHtml, el);
+    }
   }
 
   function drawNote(item) {
     const p = pos(item);
     const isSel = selected === item.id;
     const el = h('div', {
-      class: `note ${item.type} kind-${item.kind}${isSel ? ' is-selected' : ''}`, tabindex: '0', role: 'group', dataset: { id: item.id },
+      class: `note ${item.type} kind-${item.kind}${isSel ? ' is-selected' : ''}${item.type === 'stamp' && item.target ? ' on-node' : ''}`, tabindex: '0', role: 'group', dataset: { id: item.id },
       'aria-label': `${t(`note.aria.${item.type}`)}, ${t(`note.kind.${item.kind}`)}${item.text ? `: ${item.text}` : ''}`,
     });
     el.style.left = `${p.x}px`;
@@ -194,7 +239,7 @@ export function createNotes(map, stage, opts) {
     if (item.type !== 'stamp') put(el, kindPicker(item));
     if (item.type !== 'sticky') {
       const ph = t(item.type === 'zone' ? 'note.zone.placeholder' : 'note.stamp.placeholder');
-      const input = h('input', { class: 'note-input', type: 'text', placeholder: ph, 'aria-label': ph, maxlength: '400' });
+      const input = h('input', { class: 'note-input', type: 'text', placeholder: ph, 'aria-label': ph, maxlength: String(MAX_WORD) });
       input.value = item.text || '';
       input.addEventListener('input', () => { item.text = input.value; changed(false); });
       input.addEventListener('keydown', (e) => {
@@ -202,7 +247,7 @@ export function createNotes(map, stage, opts) {
         if (e.key === 'Enter' || e.key === 'Escape') { select(null); }
       });
       input.addEventListener('blur', () => setTimeout(() => { if (selected === item.id && !el.contains(document.activeElement)) render(); }, 0));
-      put(el, input);
+      put(el, input, limitHint(input, MAX_WORD));
     }
     put(el, deleteBtn(item));
     return el;
@@ -220,9 +265,23 @@ export function createNotes(map, stage, opts) {
   }
 
   function remove(id) {
+    const index = items.findIndex((it) => it.id === id);
+    if (index < 0) return;
+    trash = [{ item: items[index], index }];
     items = items.filter((it) => it.id !== id);
     if (selected === id) selected = null;
     changed();
+    opts.onDelete(1);
+  }
+
+  // Puts back what the last deletion removed, at the same place in the list.
+  function undoDelete() {
+    if (!trash) return false;
+    for (const { item, index } of trash) items.splice(Math.min(index, items.length), 0, item);
+    trash = null;
+    selected = null;
+    changed();
+    return true;
   }
 
   function add(partial, focus = 'field') {
@@ -241,11 +300,21 @@ export function createNotes(map, stage, opts) {
     opts.onTool(tool);
   }
 
+  function nodeAt(pt) {
+    for (const b of map.boxes().values()) {
+      if (b.type !== 'group' && pt.x >= b.x && pt.x <= b.x + b.w && pt.y >= b.y && pt.y <= b.y + b.h) return b.id;
+    }
+    return null;
+  }
+
   function place(kind, pt) {
     if (kind === 'sticky') add({ type: 'sticky', x: pt.x - 90, y: pt.y - 60 });
     else if (kind.startsWith('stamp:')) {
       const stamp = kind.slice(6);
-      add({ type: 'stamp', stamp, kind: stamp === 'like' ? 'like' : stamp, x: pt.x - 26, y: pt.y - 26 }, 'self');
+      const on = nodeAt(pt);
+      // Dropped on a node: it belongs to that node and sits on its corner instead of covering its name.
+      const where = on ? { target: { type: 'node', id: on, name: opts.nodeName(on) } } : { x: pt.x - 26, y: pt.y - 26 };
+      add({ type: 'stamp', stamp, kind: stamp, ...where }, 'self');
     } else add({ type: 'zone', shape: 'ellipse', x: pt.x - 150, y: pt.y - 95, w: 300, h: 190 });
     setTool('select');
   }
@@ -267,20 +336,13 @@ export function createNotes(map, stage, opts) {
       place(tool, start);
       return;
     }
-    const shape = tool;
-    draft = { el: s('path', { class: 'zone-line is-draft' }), pts: [[start.x, start.y]] };
+    draft = { el: s('path', { class: 'zone-line is-draft' }) };
     put(map.notesSvg, draft.el);
     stage.setPointerCapture(e.pointerId);
     const move = (ev) => {
       const p = map.toWorld(ev.clientX, ev.clientY);
-      if (shape === 'lasso') {
-        const last = draft.pts[draft.pts.length - 1];
-        if (Math.hypot(p.x - last[0], p.y - last[1]) > 9) draft.pts.push([Math.round(p.x), Math.round(p.y)]);
-        draft.el.setAttribute('d', `M${draft.pts.map((q) => q.join(' ')).join(' L')}`);
-      } else {
-        draft.box = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
-        draft.el.setAttribute('d', zonePath({ shape: 'ellipse', ...draft.box }));
-      }
+      draft.box = { x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) };
+      draft.el.setAttribute('d', zonePath({ shape: 'ellipse', ...draft.box }));
     };
     const up = () => {
       stage.removeEventListener('pointermove', move);
@@ -289,10 +351,9 @@ export function createNotes(map, stage, opts) {
       const d = draft;
       draft = null;
       swallowClick = Date.now();
-      if (shape === 'lasso' && d.pts.length > 5) add({ type: 'zone', shape: 'lasso', pts: d.pts });
-      else if (shape === 'ellipse' && d.box && d.box.w > 24 && d.box.h > 24) add({ type: 'zone', shape: 'ellipse', ...d.box });
-      else if (shape === 'ellipse') add({ type: 'zone', shape: 'ellipse', x: start.x - 150, y: start.y - 95, w: 300, h: 190 });
-      else render();
+      // A drag circles exactly that area; a simple click drops a ready-made circle.
+      if (d.box && d.box.w > 24 && d.box.h > 24) add({ type: 'zone', shape: 'ellipse', ...d.box });
+      else add({ type: 'zone', shape: 'ellipse', x: start.x - 150, y: start.y - 95, w: 300, h: 190 });
       setTool('select');
     };
     stage.addEventListener('pointermove', move);
@@ -393,13 +454,14 @@ export function createNotes(map, stage, opts) {
   });
 
   return {
-    load, render, setTool, placeAtCenter, remove,
+    load, render, setTool, placeAtCenter, remove, undoDelete,
+    canUndo: () => !!trash,
     tool: () => tool,
     selected: () => selected,
     deselect: () => { if (selected) { select(null); return true; } return false; },
     all: () => items,
     forApp: (app) => items.filter((it) => it.app === app),
-    forNode: (id) => items.filter((it) => it.app === opts.getApp() && it.target && it.target.type === 'node' && it.target.id === id),
+    forNode: (id) => items.filter((it) => it.app === opts.getApp() && it.type !== 'stamp' && it.target && it.target.type === 'node' && it.target.id === id),
     addNodeComment(node) {
       return add({ type: 'sticky', target: { type: 'node', id: node.id, name: node.name } });
     },
@@ -421,9 +483,13 @@ export function createNotes(map, stage, opts) {
     },
     inlineNote,
     clearApp(app) {
+      trash = items.map((item, index) => ({ item, index })).filter((x) => x.item.app === app);
+      if (!trash.length) { trash = null; return; }
+      const n = trash.length;
       items = items.filter((it) => it.app !== app);
       selected = null;
       changed();
+      opts.onDelete(n);
     },
     zoneBox: bbox,
     position: pos,
